@@ -1,0 +1,15 @@
+FROM alpine:3.21 AS build
+
+RUN apk add --no-cache build-base cmake ninja musl-dev
+
+WORKDIR /src
+COPY . .
+
+RUN cmake --preset static-release -DPID0_BUILD_TESTS=OFF
+RUN cmake --build --preset static-release --target pid0-example
+
+FROM scratch
+
+COPY --from=build /src/build/static-release/example/pid0-example /pid0-example
+
+ENTRYPOINT ["/pid0-example"]

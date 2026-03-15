@@ -1,0 +1,334 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "PID0_BUILD_EXAMPLE": "ON",
+        "PID0_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Development (Prefer musl)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-prefer-musl.cmake"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (Prefer musl)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-prefer-musl.cmake"
+      }
+    },
+    {
+      "name": "static-release",
+      "displayName": "Release (Prefer musl, static executables)",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/static-release",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "-static"
+      }
+    },
+    {
+      "name": "musl-dev",
+      "displayName": "Development (musl)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/musl-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "musl-gcc"
+      }
+    },
+    {
+      "name": "musl-release",
+      "displayName": "Release (musl)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/musl-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "musl-gcc",
+        "PID0_PACKAGE_LIBC": "musl"
+      }
+    },
+    {
+      "name": "musl-static-release",
+      "displayName": "Release (musl static executables)",
+      "inherits": "musl-release",
+      "binaryDir": "${sourceDir}/build/musl-static-release",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "-static"
+      }
+    },
+    {
+      "name": "glibc-dev",
+      "displayName": "Development (glibc fallback)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/glibc-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "glibc-release",
+      "displayName": "Release (glibc fallback)",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/glibc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PID0_PACKAGE_LIBC": "gnu"
+      }
+    },
+    {
+      "name": "pkg-x86_64-musl",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-x86_64-musl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "musl-gcc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "x86_64",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "musl"
+      }
+    },
+    {
+      "name": "pkg-x86_64-gnu",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-x86_64-gnu",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "cc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "x86_64",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "gnu"
+      }
+    },
+    {
+      "name": "pkg-aarch64-musl",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-aarch64-musl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "aarch64-linux-musl-gcc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "aarch64",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "musl"
+      }
+    },
+    {
+      "name": "pkg-aarch64-gnu",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-aarch64-gnu",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "aarch64",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "gnu"
+      }
+    },
+    {
+      "name": "pkg-armhf-musl",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-armhf-musl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "arm-linux-musleabihf-gcc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "armhf",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "musl"
+      }
+    },
+    {
+      "name": "pkg-armhf-gnu",
+      "inherits": "common",
+      "binaryDir": "${sourceDir}/build/pkg-armhf-gnu",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "arm-linux-gnueabihf-gcc",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "armhf",
+        "PID0_BUILD_EXAMPLE": "OFF",
+        "PID0_BUILD_TESTS": "OFF",
+        "PID0_PACKAGE_LIBC": "gnu"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "static-release",
+      "configurePreset": "static-release"
+    },
+    {
+      "name": "musl-dev",
+      "configurePreset": "musl-dev"
+    },
+    {
+      "name": "musl-release",
+      "configurePreset": "musl-release"
+    },
+    {
+      "name": "musl-static-release",
+      "configurePreset": "musl-static-release"
+    },
+    {
+      "name": "glibc-dev",
+      "configurePreset": "glibc-dev"
+    },
+    {
+      "name": "glibc-release",
+      "configurePreset": "glibc-release"
+    },
+    {
+      "name": "pkg-x86_64-musl",
+      "configurePreset": "pkg-x86_64-musl"
+    },
+    {
+      "name": "pkg-x86_64-gnu",
+      "configurePreset": "pkg-x86_64-gnu"
+    },
+    {
+      "name": "pkg-aarch64-musl",
+      "configurePreset": "pkg-aarch64-musl"
+    },
+    {
+      "name": "pkg-aarch64-gnu",
+      "configurePreset": "pkg-aarch64-gnu"
+    },
+    {
+      "name": "pkg-armhf-musl",
+      "configurePreset": "pkg-armhf-musl"
+    },
+    {
+      "name": "pkg-armhf-gnu",
+      "configurePreset": "pkg-armhf-gnu"
+    }
+  ],
+  "packagePresets": [
+    {
+      "name": "musl-package",
+      "configurePreset": "musl-release",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "glibc-package",
+      "configurePreset": "glibc-release",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-x86_64-musl",
+      "configurePreset": "pkg-x86_64-musl",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-x86_64-gnu",
+      "configurePreset": "pkg-x86_64-gnu",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-aarch64-musl",
+      "configurePreset": "pkg-aarch64-musl",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-aarch64-gnu",
+      "configurePreset": "pkg-aarch64-gnu",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-armhf-musl",
+      "configurePreset": "pkg-armhf-musl",
+      "generators": [
+        "TGZ"
+      ]
+    },
+    {
+      "name": "pkg-armhf-gnu",
+      "configurePreset": "pkg-armhf-gnu",
+      "generators": [
+        "TGZ"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "static-release",
+      "configurePreset": "static-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "musl-dev",
+      "configurePreset": "musl-dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "glibc-dev",
+      "configurePreset": "glibc-dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

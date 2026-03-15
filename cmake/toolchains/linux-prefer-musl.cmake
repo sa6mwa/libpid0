@@ -1,0 +1,13 @@
+if(NOT CMAKE_SYSTEM_NAME)
+  set(CMAKE_SYSTEM_NAME Linux)
+endif()
+
+if(NOT DEFINED CMAKE_C_COMPILER)
+  find_program(PID0_MUSL_GCC musl-gcc)
+  if(PID0_MUSL_GCC)
+    set(CMAKE_C_COMPILER "${PID0_MUSL_GCC}" CACHE FILEPATH "Preferred musl compiler" FORCE)
+    message(STATUS "pid0: using musl-gcc by default: ${PID0_MUSL_GCC}")
+  else()
+    message(STATUS "pid0: musl-gcc not found, falling back to the default C compiler")
+  endif()
+endif()

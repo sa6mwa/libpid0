@@ -1,4 +1,9 @@
+#ifdef PID0_SINGLE_HEADER_TEST
+#define PID0_IMPLEMENTATION 1
+#include "libpid0_single_header.h"
+#else
 #include "pid0_internal.h"
+#endif
 
 #include <cmocka.h>
 

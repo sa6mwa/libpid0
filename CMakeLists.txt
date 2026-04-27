@@ -39,12 +39,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_definitions(_POSIX_C_SOURCE=200809L)
 
 set(PID0_SOURCES src/pid0.c)
+set(PID0_SINGLE_HEADER_BUILD "${CMAKE_CURRENT_BINARY_DIR}/generated/include/libpid0_single_header.h")
+set(PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/single-header/include")
+set(PID0_SINGLE_HEADER_BUILD_ALIAS "${PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR}/pid0/pid0.h")
+set(PID0_SINGLE_HEADER_DIST_GZ "${CMAKE_CURRENT_SOURCE_DIR}/dist/libpid0-${PROJECT_VERSION}.h.gz")
 set(PID0_FORMAT_SOURCES
   include/pid0/pid0.h
   src/pid0.c
   src/pid0_internal.h
   example/main.c
+  example/single_header_main.c
   tests/pid0_integration_test.c
+  tests/pid0_single_header_unit_test.c
   tests/pid0_test_helper.c
   tests/pid0_unit_test.c
 )
@@ -88,6 +94,12 @@ endif()
 set(PID0_PACKAGE_BASENAME
   "libpid0-${PROJECT_VERSION}-${PID0_PACKAGE_OS}-${PID0_PACKAGE_ARCH}-${PID0_PACKAGE_LIBC_NAME}"
 )
+
+set(PID0_SINGLE_HEADER_SOURCE_PATHS "")
+foreach(pid0_source IN LISTS PID0_SOURCES)
+  list(APPEND PID0_SINGLE_HEADER_SOURCE_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${pid0_source}")
+endforeach()
+list(JOIN PID0_SINGLE_HEADER_SOURCE_PATHS "|" PID0_SINGLE_HEADER_SOURCE_PATHS_ARG)
 
 function(pid0_configure_library target_name)
   target_include_directories(
@@ -139,14 +151,11 @@ install(
   TARGETS pid0_static
   EXPORT pid0Targets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  COMPONENT dev
 )
 install(
   TARGETS pid0_shared
   EXPORT pid0Targets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  COMPONENT runtime
-  NAMELINK_COMPONENT runtime
 )
 install(
   TARGETS pid0
@@ -154,33 +163,22 @@ install(
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  COMPONENT dev
 )
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-  COMPONENT dev
 )
 install(
   EXPORT pid0Targets
   FILE pid0Targets.cmake
   NAMESPACE pid0::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pid0
-  COMPONENT dev
 )
 install(
   FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
     ${CMAKE_CURRENT_SOURCE_DIR}/README.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/libpid0
-  COMPONENT runtime
-)
-install(
-  FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
-    ${CMAKE_CURRENT_SOURCE_DIR}/README.md
-  DESTINATION ${CMAKE_INSTALL_DATADIR}/libpid0
-  COMPONENT dev
 )
 
 if(PID0_BUILD_EXAMPLE)
@@ -193,20 +191,11 @@ if(PID0_BUILD_TESTS)
 endif()
 
 set(CPACK_GENERATOR "TGZ")
-set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
-set(CPACK_COMPONENTS_GROUPING IGNORE)
+set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/dist")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${PID0_PACKAGE_BASENAME}")
-set(CPACK_ARCHIVE_RUNTIME_FILE_NAME "${PID0_PACKAGE_BASENAME}")
-set(CPACK_ARCHIVE_DEV_FILE_NAME "${PID0_PACKAGE_BASENAME}-dev")
-set(CPACK_COMPONENTS_ALL runtime dev)
-set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "libpid0 runtime")
-set(CPACK_COMPONENT_DEV_DISPLAY_NAME "libpid0 development files")
-set(CPACK_COMPONENT_DEV_DESCRIPTION "Headers, static library, CMake metadata, and documentation for libpid0")
-set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Runtime shared libraries for libpid0")
-set(CPACK_COMPONENT_DEV_DEPENDS runtime)
 
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
 if(CLANG_FORMAT_BIN)
@@ -217,5 +206,32 @@ if(CLANG_FORMAT_BIN)
     COMMENT "Formatting libpid0 source files with clang-format"
   )
 endif()
+
+add_custom_target(
+  package-single-header
+  COMMAND
+    ${CMAKE_COMMAND}
+      -DPID0_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+      -DPID0_VERSION=${PROJECT_VERSION}
+      -DPID0_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pid0/pid0.h
+      -DPID0_INTERNAL_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/src/pid0_internal.h
+      -DPID0_SINGLE_HEADER_BUILD=${PID0_SINGLE_HEADER_BUILD}
+      -DPID0_SINGLE_HEADER_BUILD_ALIAS=${PID0_SINGLE_HEADER_BUILD_ALIAS}
+      -DPID0_SINGLE_HEADER_DIST_GZ=${PID0_SINGLE_HEADER_DIST_GZ}
+      -DPID0_SINGLE_HEADER_SOURCES=${PID0_SINGLE_HEADER_SOURCE_PATHS_ARG}
+      -DPID0_CLANG_FORMAT_BIN=${CLANG_FORMAT_BIN}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_single_header.cmake
+  VERBATIM
+)
+
+add_custom_target(
+  package-checksums
+  COMMAND
+    ${CMAKE_COMMAND}
+      -DPID0_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+      -DPID0_VERSION=${PROJECT_VERSION}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_checksums.cmake
+  VERBATIM
+)
 
 include(CPack)

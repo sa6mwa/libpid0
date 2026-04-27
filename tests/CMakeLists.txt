@@ -60,6 +60,36 @@ set_target_properties(
 )
 add_test(NAME pid0-unit-tests COMMAND $<TARGET_FILE:pid0-unit-tests>)
 
+add_executable(pid0-single-header-unit-tests pid0_single_header_unit_test.c)
+target_link_libraries(pid0-single-header-unit-tests PRIVATE ${PID0_CMOCKA_TARGET})
+target_include_directories(
+  pid0-single-header-unit-tests
+  PRIVATE
+    ${CMAKE_BINARY_DIR}/generated/include
+)
+target_compile_options(pid0-single-header-unit-tests PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(pid0-single-header-unit-tests package-single-header)
+set_target_properties(
+  pid0-single-header-unit-tests
+  PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(
+  NAME pid0-single-header-unit-tests
+  COMMAND $<TARGET_FILE:pid0-single-header-unit-tests>
+)
+
+add_test(
+  NAME pid0-single-header-artifact-test
+  COMMAND
+    ${CMAKE_COMMAND}
+      -DPID0_SINGLE_HEADER_BUILD=${PID0_SINGLE_HEADER_BUILD}
+      -DPID0_SINGLE_HEADER_BUILD_ALIAS=${PID0_SINGLE_HEADER_BUILD_ALIAS}
+      -DPID0_SINGLE_HEADER_DIST_GZ=${PID0_SINGLE_HEADER_DIST_GZ}
+      -DPID0_VERSION=${PROJECT_VERSION}
+      -P ${CMAKE_SOURCE_DIR}/tests/pid0_single_header_artifact_test.cmake
+)
+
 add_executable(pid0-integration-tests pid0_integration_test.c)
 target_link_libraries(pid0-integration-tests PRIVATE ${PID0_CMOCKA_TARGET})
 target_compile_options(pid0-integration-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -77,3 +107,14 @@ add_test(NAME pid0-integration-tests COMMAND $<TARGET_FILE:pid0-integration-test
 
 add_test(NAME pid0-container-smoke-test COMMAND ${CMAKE_SOURCE_DIR}/scripts/container-smoke-test.sh)
 set_tests_properties(pid0-container-smoke-test PROPERTIES SKIP_RETURN_CODE 77)
+
+if(TARGET pid0-single-header-example)
+  add_test(
+    NAME pid0-single-header-example
+    COMMAND
+      ${CMAKE_COMMAND} -E env
+        PID0_EXAMPLE_SLEEP_SECONDS=0
+        $<TARGET_FILE:pid0-single-header-example>
+        Example
+  )
+endif()

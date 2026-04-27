@@ -55,6 +55,14 @@ The default is `30s`.
 ./scripts/test.sh dev
 ```
 
+The same development workflow is also available through `make`:
+
+```sh
+make build
+make test
+make release
+```
+
 Useful presets:
 
 - `dev`
@@ -104,6 +112,13 @@ Run it from the build tree:
 printf 'Alice\n' | ./scripts/run-example.sh build/dev -i
 ```
 
+A single-header example is also built when examples are enabled:
+
+```sh
+cmake --build --preset dev --target pid0-single-header-example
+PID0_EXAMPLE_SLEEP_SECONDS=0 build/dev/example/pid0-single-header-example Alice
+```
+
 `example/Containerfile` builds a static `musl` binary and copies it into a
 `scratch` image.
 
@@ -137,18 +152,13 @@ Versioning rules:
 
 Artifacts:
 
+- `dist/libpid0-<version>.h.gz`
 - `dist/libpid0-<version>-linux-x86_64-musl.tar.gz`
-- `dist/libpid0-<version>-linux-x86_64-musl-dev.tar.gz`
 - `dist/libpid0-<version>-linux-x86_64-gnu.tar.gz`
-- `dist/libpid0-<version>-linux-x86_64-gnu-dev.tar.gz`
 - `dist/libpid0-<version>-linux-aarch64-musl.tar.gz`
-- `dist/libpid0-<version>-linux-aarch64-musl-dev.tar.gz`
 - `dist/libpid0-<version>-linux-aarch64-gnu.tar.gz`
-- `dist/libpid0-<version>-linux-aarch64-gnu-dev.tar.gz`
 - `dist/libpid0-<version>-linux-armhf-musl.tar.gz`
-- `dist/libpid0-<version>-linux-armhf-musl-dev.tar.gz`
 - `dist/libpid0-<version>-linux-armhf-gnu.tar.gz`
-- `dist/libpid0-<version>-linux-armhf-gnu-dev.tar.gz`
 - `dist/libpid0-<version>-CHECKSUMS`
 
 Build them with:
@@ -156,6 +166,8 @@ Build them with:
 ```sh
 ./scripts/package.sh
 ```
+
+`make release` is an alias for `./scripts/package.sh`.
 
 `./scripts/package.sh` builds the full release matrix by default:
 
@@ -174,13 +186,13 @@ You can also build subsets:
 ```
 
 After packaging, `dist/libpid0-<version>-CHECKSUMS` is generated with
-`sha256sum` entries for the produced tarballs, using basenames only.
+`sha256sum` entries for the produced tarballs and gzipped single-header
+artifact, using basenames only.
 
-The runtime package contains the shared libraries under `lib/` and
-`share/libpid0/LICENSE`, plus `share/libpid0/README.md`.
-
-The `-dev` package contains headers, `libpid0.a`, CMake package metadata,
-documentation, and the license.
+Each platform package contains headers, `libpid0.a`, shared libraries, CMake
+package metadata, documentation, and the license. `lib/libpid0.so` is a symlink
+to `libpid0.so.0`, and `lib/libpid0.so.0` is a symlink to the versioned shared
+library.
 
 The test suite uses `cmocka` 2.x. The build first tries a system `cmocka`
 installation and falls back to fetching `cmocka-2.0.2`.

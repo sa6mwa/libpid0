@@ -36,12 +36,13 @@ else()
   else()
     message(FATAL_ERROR "Unable to determine the cmocka target name")
   endif()
+  set(PID0_CMOCKA_SYSTEM_INCLUDE_DIR "${cmocka_SOURCE_DIR}/include")
 endif()
 
 add_executable(pid0-test-helper pid0_test_helper.c)
 target_link_libraries(pid0-test-helper PRIVATE pid0::pid0)
 target_include_directories(pid0-test-helper PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_compile_options(pid0-test-helper PRIVATE -Wall -Wextra -Wpedantic)
+pid0_configure_c_executable(pid0-test-helper)
 target_link_libraries(pid0-test-helper PRIVATE util)
 set_target_properties(
   pid0-test-helper
@@ -52,7 +53,11 @@ set_target_properties(
 add_executable(pid0-unit-tests pid0_unit_test.c)
 target_link_libraries(pid0-unit-tests PRIVATE pid0::pid0 ${PID0_CMOCKA_TARGET})
 target_include_directories(pid0-unit-tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_compile_options(pid0-unit-tests PRIVATE -Wall -Wextra -Wpedantic)
+if(PID0_CMOCKA_SYSTEM_INCLUDE_DIR)
+  target_include_directories(pid0-unit-tests SYSTEM PRIVATE ${PID0_CMOCKA_SYSTEM_INCLUDE_DIR})
+endif()
+target_compile_definitions(pid0-unit-tests PRIVATE inline=)
+pid0_configure_c_executable(pid0-unit-tests)
 set_target_properties(
   pid0-unit-tests
   PROPERTIES
@@ -67,7 +72,11 @@ target_include_directories(
   PRIVATE
     ${CMAKE_BINARY_DIR}/generated/include
 )
-target_compile_options(pid0-single-header-unit-tests PRIVATE -Wall -Wextra -Wpedantic)
+if(PID0_CMOCKA_SYSTEM_INCLUDE_DIR)
+  target_include_directories(pid0-single-header-unit-tests SYSTEM PRIVATE ${PID0_CMOCKA_SYSTEM_INCLUDE_DIR})
+endif()
+target_compile_definitions(pid0-single-header-unit-tests PRIVATE inline=)
+pid0_configure_c_executable(pid0-single-header-unit-tests)
 add_dependencies(pid0-single-header-unit-tests package-single-header)
 set_target_properties(
   pid0-single-header-unit-tests
@@ -92,7 +101,11 @@ add_test(
 
 add_executable(pid0-integration-tests pid0_integration_test.c)
 target_link_libraries(pid0-integration-tests PRIVATE ${PID0_CMOCKA_TARGET})
-target_compile_options(pid0-integration-tests PRIVATE -Wall -Wextra -Wpedantic)
+if(PID0_CMOCKA_SYSTEM_INCLUDE_DIR)
+  target_include_directories(pid0-integration-tests SYSTEM PRIVATE ${PID0_CMOCKA_SYSTEM_INCLUDE_DIR})
+endif()
+target_compile_definitions(pid0-integration-tests PRIVATE inline=)
+pid0_configure_c_executable(pid0-integration-tests)
 target_compile_definitions(
   pid0-integration-tests
   PRIVATE

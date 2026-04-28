@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <pty.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -90,6 +89,8 @@ static int mode_signal_wait(int argc, char **argv) {
 static int mode_tty_foreground(void) {
   int master_fd = -1;
   int slave_fd = -1;
+  pid_t child_pid;
+  pid_t foreground;
 
   if (openpty(&master_fd, &slave_fd, NULL, NULL, NULL) != 0) {
     perror("openpty");
@@ -114,7 +115,7 @@ static int mode_tty_foreground(void) {
     return 2;
   }
 
-  pid_t child_pid = fork();
+  child_pid = fork();
   if (child_pid < 0) {
     perror("fork");
     return 2;
@@ -140,7 +141,7 @@ static int mode_tty_foreground(void) {
     return 2;
   }
 
-  pid_t foreground = tcgetpgrp(STDIN_FILENO);
+  foreground = tcgetpgrp(STDIN_FILENO);
   if (foreground != child_pid) {
     fprintf(stderr, "foreground pgid=%d expected=%d\n", (int)foreground,
             (int)child_pid);

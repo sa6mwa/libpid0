@@ -31,7 +31,7 @@ include(CheckCSourceCompiles)
 option(PID0_BUILD_EXAMPLE "Build the example application" ON)
 option(PID0_BUILD_TESTS "Build the test suite" ON)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -110,8 +110,33 @@ function(pid0_configure_library target_name)
     PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src
   )
-  target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(
+      ${target_name}
+      PRIVATE
+        -std=c89
+        -Wall
+        -Wextra
+        -Wpedantic
+        -pedantic-errors
+    )
+  endif()
   target_compile_definitions(${target_name} PUBLIC _POSIX_C_SOURCE=200809L)
+endfunction()
+
+function(pid0_configure_c_executable target_name)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(
+      ${target_name}
+      PRIVATE
+        -std=c89
+        -Wall
+        -Wextra
+        -Wpedantic
+        -pedantic-errors
+    )
+  endif()
+  target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
 endfunction()
 
 add_library(pid0_static STATIC ${PID0_SOURCES})

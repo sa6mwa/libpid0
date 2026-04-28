@@ -9,7 +9,6 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -104,8 +103,7 @@ static void test_wait_for_managed_child_reaps_other_children(void **state) {
     _exit(7);
   }
 
-  assert_int_equal(pid0_wait_for_managed_child(managed_pid, &exit_code, false),
-                   1);
+  assert_int_equal(pid0_wait_for_managed_child(managed_pid, &exit_code, 0), 1);
   assert_int_equal(exit_code, 7);
 
   errno = 0;
@@ -116,6 +114,7 @@ static void test_wait_for_managed_child_reaps_other_children(void **state) {
 static void test_drain_zombies_nonblock(void **state) {
   int status = 0;
   pid_t pid;
+  struct timespec delay = {0, 50 * 1000 * 1000};
   (void)state;
 
   pid = fork();
@@ -124,7 +123,6 @@ static void test_drain_zombies_nonblock(void **state) {
     _exit(0);
   }
 
-  struct timespec delay = {0, 50 * 1000 * 1000};
   nanosleep(&delay, NULL);
   pid0_drain_zombies_nonblock();
 

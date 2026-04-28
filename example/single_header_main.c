@@ -25,7 +25,10 @@ static int example_submain(int argc, char **argv) {
 }
 
 static void sleep_for_configured_duration(void) {
-  struct timespec remaining = {(time_t)configured_sleep_seconds(), 0};
+  struct timespec remaining;
+
+  remaining.tv_sec = (time_t)configured_sleep_seconds();
+  remaining.tv_nsec = 0;
 
   while (nanosleep(&remaining, &remaining) != 0) {
     if (errno != EINTR) {
@@ -37,13 +40,14 @@ static void sleep_for_configured_duration(void) {
 
 static unsigned int configured_sleep_seconds(void) {
   const char *value = getenv("PID0_EXAMPLE_SLEEP_SECONDS");
+  char *end = NULL;
+  unsigned long parsed;
 
   if (value == NULL || *value == '\0') {
     return 1U;
   }
 
-  char *end = NULL;
-  unsigned long parsed = strtoul(value, &end, 10);
+  parsed = strtoul(value, &end, 10);
   if (end == value || *end != '\0') {
     fprintf(stderr,
             "single-header-example: invalid PID0_EXAMPLE_SLEEP_SECONDS=%s, "

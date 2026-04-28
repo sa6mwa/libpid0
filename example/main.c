@@ -40,6 +40,9 @@ static int example_submain(int argc, char **argv) {
 }
 
 static int read_name_from_stdin(char *buffer, size_t buffer_size) {
+  size_t length;
+  int ch = 0;
+
   if (buffer == NULL || buffer_size < 2) {
     fprintf(stderr, "example: invalid input buffer\n");
     return -1;
@@ -55,13 +58,12 @@ static int read_name_from_stdin(char *buffer, size_t buffer_size) {
     return -1;
   }
 
-  size_t length = strlen(buffer);
+  length = strlen(buffer);
   if (length > 0 && buffer[length - 1] == '\n') {
     buffer[length - 1] = '\0';
     return 0;
   }
 
-  int ch = 0;
   while ((ch = getchar()) != '\n' && ch != EOF) {
   }
   fprintf(stderr, "example: input too long\n");
@@ -69,7 +71,10 @@ static int read_name_from_stdin(char *buffer, size_t buffer_size) {
 }
 
 static void sleep_for_configured_duration(void) {
-  struct timespec remaining = {(time_t)configured_sleep_seconds(), 0};
+  struct timespec remaining;
+
+  remaining.tv_sec = (time_t)configured_sleep_seconds();
+  remaining.tv_nsec = 0;
 
   while (nanosleep(&remaining, &remaining) != 0) {
     if (errno != EINTR) {
@@ -81,13 +86,14 @@ static void sleep_for_configured_duration(void) {
 
 static unsigned int configured_sleep_seconds(void) {
   const char *value = getenv("PID0_EXAMPLE_SLEEP_SECONDS");
+  char *end = NULL;
+  unsigned long parsed;
 
   if (value == NULL || *value == '\0') {
     return 10U;
   }
 
-  char *end = NULL;
-  unsigned long parsed = strtoul(value, &end, 10);
+  parsed = strtoul(value, &end, 10);
   if (end == value || *end != '\0') {
     fprintf(
         stderr,

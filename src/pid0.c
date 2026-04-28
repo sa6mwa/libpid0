@@ -4,7 +4,6 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,19 +35,21 @@ int pid0_run(pid0_submain_fn submain, int argc, char **argv) {
   return pid0_supervise(submain, argc, argv);
 }
 
-bool pid0_is_terminal_fd(int fd) { return fd >= 0 && isatty(fd) == 1; }
+int pid0_is_terminal_fd(int fd) { return fd >= 0 && isatty(fd) == 1; }
 
 int pid0_set_foreground_pgrp_for_stdio(pid_t pgid) {
   const int fds[] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
   int last_error = 0;
+  size_t i;
+  size_t j;
 
-  for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); ++i) {
+  for (i = 0; i < sizeof(fds) / sizeof(fds[0]); ++i) {
     int fd = fds[i];
-    bool seen = false;
+    int seen = 0;
 
-    for (size_t j = 0; j < i; ++j) {
+    for (j = 0; j < i; ++j) {
       if (fds[j] == fd) {
-        seen = true;
+        seen = 1;
         break;
       }
     }
@@ -71,7 +72,7 @@ int pid0_set_foreground_pgrp_for_stdio(pid_t pgid) {
   return 0;
 }
 
-bool pid0_is_terminate_signal(int signum) {
+int pid0_is_terminate_signal(int signum) {
   return signum == SIGTERM || signum == SIGINT || signum == SIGQUIT ||
          signum == SIGHUP;
 }
@@ -124,9 +125,9 @@ int pid0_load_stop_timeout(struct timespec *timeout_out) {
 }
 
 int pid0_wait_for_managed_child(pid_t managed_pid, int *exit_code_out,
-                                bool nonblock) {
+                                int nonblock) {
   int options = nonblock ? WNOHANG : 0;
-  bool reap_any_child = managed_pid < 0;
+  int reap_any_child = managed_pid < 0;
 
   if (exit_code_out == NULL) {
     errno = EINVAL;
@@ -172,7 +173,7 @@ int pid0_wait_for_managed_child(pid_t managed_pid, int *exit_code_out,
 void pid0_drain_zombies_nonblock(void) {
   int discard = 0;
 
-  while (pid0_wait_for_managed_child(-1, &discard, true) == 1) {
+  while (pid0_wait_for_managed_child(-1, &discard, 1) == 1) {
   }
 }
 
@@ -181,8 +182,8 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
   sigset_t old_mask;
   struct timespec stop_timeout;
   struct timespec deadline = {0, 0};
-  bool kill_armed = false;
-  bool kill_sent = false;
+  int kill_armed = 0;
+  int kill_sent = 0;
   pid_t child_pid = -1;
 
   if (sigfillset(&signal_mask) != 0) {
@@ -231,7 +232,11 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
 
   for (;;) {
     int exit_code = 0;
-    int child_state = pid0_wait_for_managed_child(child_pid, &exit_code, true);
+    int child_state = pid0_wait_for_managed_child(child_pid, &exit_code, 1);
+    struct timespec wait_timeout;
+    struct timespec *wait_timeout_ptr = NULL;
+    siginfo_t info;
+    int signum;
 
     if (child_state < 0) {
       perror("pid0: waitpid");
@@ -246,22 +251,18 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
       return exit_code;
     }
 
-    struct timespec wait_timeout;
-    struct timespec *wait_timeout_ptr = NULL;
-
     if (kill_armed && !kill_sent) {
       if (pid0_remaining_timeout(&deadline, &wait_timeout) == 0) {
         if (kill(-child_pid, SIGKILL) != 0 && errno != ESRCH) {
           perror("pid0: kill(SIGKILL)");
         }
-        kill_sent = true;
+        kill_sent = 1;
       } else {
         wait_timeout_ptr = &wait_timeout;
       }
     }
 
-    siginfo_t info;
-    int signum = sigtimedwait(&signal_mask, &info, wait_timeout_ptr);
+    signum = sigtimedwait(&signal_mask, &info, wait_timeout_ptr);
     if (signum < 0) {
       if (errno == EINTR) {
         continue;
@@ -270,7 +271,7 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
         if (kill(-child_pid, SIGKILL) != 0 && errno != ESRCH) {
           perror("pid0: kill(SIGKILL)");
         }
-        kill_sent = true;
+        kill_sent = 1;
         continue;
       }
       perror("pid0: sigtimedwait");
@@ -290,7 +291,7 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
 
       if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
         pid0_add_timespec(&now, &stop_timeout, &deadline);
-        kill_armed = true;
+        kill_armed = 1;
       }
     }
   }
@@ -335,8 +336,8 @@ static int pid0_remaining_timeout(const struct timespec *deadline,
 static int pid0_parse_duration_component(const char **cursor,
                                          struct timespec *timeout_out) {
   char *end = NULL;
-  unsigned long long amount = strtoull(*cursor, &end, 10);
-  unsigned long long seconds = 0;
+  unsigned long amount = strtoul(*cursor, &end, 10);
+  unsigned long seconds = 0;
 
   if (end == *cursor) {
     errno = EINVAL;
@@ -350,10 +351,10 @@ static int pid0_parse_duration_component(const char **cursor,
 
   switch (*end) {
   case 'h':
-    seconds = amount * 60ULL * 60ULL;
+    seconds = amount * 60UL * 60UL;
     break;
   case 'm':
-    seconds = amount * 60ULL;
+    seconds = amount * 60UL;
     break;
   case 's':
     seconds = amount;

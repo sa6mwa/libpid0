@@ -2,7 +2,6 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,9 +17,9 @@ static void test_pid1_wrapper_forwards_sigterm(void **state);
 
 static int run_process(char *const argv[], int *exit_code_out, pid_t *pid_out);
 static int run_process_with_stderr_mode(char *const argv[], int *exit_code_out,
-                                        pid_t *pid_out, bool silence_stderr);
+                                        pid_t *pid_out, int silence_stderr);
 static int wait_for_process(pid_t pid, int *exit_code_out);
-static bool unshare_available(void);
+static int unshare_available(void);
 static int run_unshare_helper(const char *mode, const char *arg,
                               int *exit_code_out, pid_t *pid_out);
 
@@ -69,6 +68,7 @@ static void test_pid1_wrapper_returns_child_exit_code(void **state) {
 static void test_pid1_wrapper_forwards_sigterm(void **state) {
   int exit_code = 0;
   pid_t pid = -1;
+  struct timespec delay = {0, 150 * 1000 * 1000};
   (void)state;
 
   if (!unshare_available()) {
@@ -78,7 +78,6 @@ static void test_pid1_wrapper_forwards_sigterm(void **state) {
   assert_int_equal(run_unshare_helper("signal-wait", NULL, &exit_code, &pid),
                    0);
 
-  struct timespec delay = {0, 150 * 1000 * 1000};
   nanosleep(&delay, NULL);
 
   assert_int_equal(kill(pid, SIGTERM), 0);
@@ -87,19 +86,21 @@ static void test_pid1_wrapper_forwards_sigterm(void **state) {
 }
 
 static int run_process(char *const argv[], int *exit_code_out, pid_t *pid_out) {
-  return run_process_with_stderr_mode(argv, exit_code_out, pid_out, false);
+  return run_process_with_stderr_mode(argv, exit_code_out, pid_out, 0);
 }
 
 static int run_process_with_stderr_mode(char *const argv[], int *exit_code_out,
-                                        pid_t *pid_out, bool silence_stderr) {
+                                        pid_t *pid_out, int silence_stderr) {
   pid_t pid = fork();
 
   if (pid < 0) {
     return -1;
   }
   if (pid == 0) {
+    FILE *null_stream;
+
     if (silence_stderr) {
-      FILE *null_stream = freopen("/dev/null", "w", stderr);
+      null_stream = freopen("/dev/null", "w", stderr);
       if (null_stream == NULL) {
         _exit(127);
       }
@@ -138,7 +139,7 @@ static int wait_for_process(pid_t pid, int *exit_code_out) {
   return 0;
 }
 
-static bool unshare_available(void) {
+static int unshare_available(void) {
   static int cached = -1;
   int exit_code = 0;
   char *const argv[] = {
@@ -146,14 +147,14 @@ static bool unshare_available(void) {
       PID0_TEST_HELPER_PATH, "assert-not-pid1", "19",    NULL};
 
   if (access("/usr/bin/env", X_OK) != 0) {
-    return false;
+    return 0;
   }
   if (cached >= 0) {
     return cached == 1;
   }
-  if (run_process_with_stderr_mode(argv, &exit_code, NULL, true) != 0) {
+  if (run_process_with_stderr_mode(argv, &exit_code, NULL, 1) != 0) {
     cached = 0;
-    return false;
+    return 0;
   }
   cached = exit_code == 19 ? 1 : 0;
   return cached == 1;
@@ -166,10 +167,12 @@ static int run_unshare_helper(const char *mode, const char *arg,
                   "-Urpf",
                   "--mount-proc",
                   (char *)PID0_TEST_HELPER_PATH,
-                  (char *)mode,
-                  (char *)arg,
+                  NULL,
+                  NULL,
                   NULL};
 
+  argv[5] = (char *)mode;
+  argv[6] = (char *)arg;
   if (arg == NULL) {
     argv[6] = NULL;
   }

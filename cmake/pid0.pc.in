@@ -1,0 +1,10 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+
+Name: pid0
+Description: Tiny PID1 helper for Linux containers and VMs
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lpid0
+Cflags: -I${includedir}

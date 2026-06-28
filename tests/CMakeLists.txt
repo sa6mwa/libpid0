@@ -64,6 +64,7 @@ set_target_properties(
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 add_test(NAME pid0-unit-tests COMMAND $<TARGET_FILE:pid0-unit-tests>)
+set_tests_properties(pid0-unit-tests PROPERTIES LABELS "unit;local" TIMEOUT 10)
 
 add_executable(pid0-single-header-unit-tests pid0_single_header_unit_test.c)
 target_link_libraries(pid0-single-header-unit-tests PRIVATE ${PID0_CMOCKA_TARGET})
@@ -87,6 +88,7 @@ add_test(
   NAME pid0-single-header-unit-tests
   COMMAND $<TARGET_FILE:pid0-single-header-unit-tests>
 )
+set_tests_properties(pid0-single-header-unit-tests PROPERTIES LABELS "unit;local" TIMEOUT 10)
 
 add_test(
   NAME pid0-single-header-artifact-test
@@ -98,6 +100,7 @@ add_test(
       -DPID0_VERSION=${PROJECT_VERSION}
       -P ${CMAKE_SOURCE_DIR}/tests/pid0_single_header_artifact_test.cmake
 )
+set_tests_properties(pid0-single-header-artifact-test PROPERTIES LABELS "packaging;local" TIMEOUT 10)
 
 add_executable(pid0-integration-tests pid0_integration_test.c)
 target_link_libraries(pid0-integration-tests PRIVATE ${PID0_CMOCKA_TARGET})
@@ -117,9 +120,16 @@ set_target_properties(
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 add_test(NAME pid0-integration-tests COMMAND $<TARGET_FILE:pid0-integration-tests>)
+set_tests_properties(pid0-integration-tests PROPERTIES LABELS "integration;offline;local" TIMEOUT 20)
 
 add_test(NAME pid0-container-smoke-test COMMAND ${CMAKE_SOURCE_DIR}/scripts/container-smoke-test.sh)
-set_tests_properties(pid0-container-smoke-test PROPERTIES SKIP_RETURN_CODE 77)
+set_tests_properties(
+  pid0-container-smoke-test
+  PROPERTIES
+    LABELS "example-smoke;local"
+    SKIP_RETURN_CODE 77
+    TIMEOUT 120
+)
 
 if(TARGET pid0-single-header-example)
   add_test(
@@ -130,4 +140,5 @@ if(TARGET pid0-single-header-example)
         $<TARGET_FILE:pid0-single-header-example>
         Example
   )
+  set_tests_properties(pid0-single-header-example PROPERTIES LABELS "example-smoke;local" TIMEOUT 10)
 endif()

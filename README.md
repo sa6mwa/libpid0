@@ -50,9 +50,9 @@ The default is `30s`.
 ## Build
 
 ```sh
-./scripts/configure.sh dev
-./scripts/build.sh dev
-./scripts/test.sh dev
+./scripts/configure.sh debug
+./scripts/build.sh debug
+./scripts/test.sh debug
 ```
 
 The same development workflow is also available through `make`:
@@ -60,21 +60,23 @@ The same development workflow is also available through `make`:
 ```sh
 make build
 make test
-make release
+make prerelease
 ```
 
 Useful presets:
 
-- `dev`
+- `debug`
 - `release`
+- `asan`
 - `static-release`
-- `musl-dev`
-- `musl-release`
-- `musl-static-release`
-- `glibc-dev`
-- `glibc-release`
+- `x86_64-linux-gnu-release`
+- `x86_64-linux-musl-release`
+- `aarch64-linux-gnu-release`
+- `aarch64-linux-musl-release`
+- `armhf-linux-gnu-release`
+- `armhf-linux-musl-release`
 
-`dev` and `release` prefer `musl-gcc` automatically and fall back to the system
+`debug` and `release` prefer `musl-gcc` automatically and fall back to the system
 compiler only when musl is unavailable.
 
 `static-release` is the preset used for the scratch-container example.
@@ -84,7 +86,7 @@ compiler only when musl is unavailable.
 Format all tracked C/header sources with:
 
 ```sh
-cmake --build --preset dev --target format
+cmake --build --preset debug --target format
 ```
 
 Inspect `dist/` as a tree while traversing `.tar.gz` artifacts virtually,
@@ -107,16 +109,16 @@ seconds, and exits.
 Run it from the build tree:
 
 ```sh
-./scripts/run-example.sh build/dev
-./scripts/run-example.sh build/dev Alice
-printf 'Alice\n' | ./scripts/run-example.sh build/dev -i
+./scripts/run-example.sh build/debug
+./scripts/run-example.sh build/debug Alice
+printf 'Alice\n' | ./scripts/run-example.sh build/debug -i
 ```
 
 A single-header example is also built when examples are enabled:
 
 ```sh
-cmake --build --preset dev --target pid0-single-header-example
-PID0_EXAMPLE_SLEEP_SECONDS=0 build/dev/example/pid0-single-header-example Alice
+cmake --build --preset debug --target pid0-single-header-example
+PID0_EXAMPLE_SLEEP_SECONDS=0 build/debug/example/pid0-single-header-example Alice
 ```
 
 `example/Containerfile` builds a static `musl` binary and copies it into a
@@ -152,24 +154,27 @@ Versioning rules:
 
 Artifacts:
 
+- `dist/libpid0-<version>.tar.gz`
 - `dist/libpid0-<version>.h.gz`
-- `dist/libpid0-<version>-linux-x86_64-musl.tar.gz`
-- `dist/libpid0-<version>-linux-x86_64-gnu.tar.gz`
-- `dist/libpid0-<version>-linux-aarch64-musl.tar.gz`
-- `dist/libpid0-<version>-linux-aarch64-gnu.tar.gz`
-- `dist/libpid0-<version>-linux-armhf-musl.tar.gz`
-- `dist/libpid0-<version>-linux-armhf-gnu.tar.gz`
+- `dist/libpid0-<version>-x86_64-linux-musl.tar.gz`
+- `dist/libpid0-<version>-x86_64-linux-gnu.tar.gz`
+- `dist/libpid0-<version>-aarch64-linux-musl.tar.gz`
+- `dist/libpid0-<version>-aarch64-linux-gnu.tar.gz`
+- `dist/libpid0-<version>-armhf-linux-musl.tar.gz`
+- `dist/libpid0-<version>-armhf-linux-gnu.tar.gz`
 - `dist/libpid0-<version>-CHECKSUMS`
 
 Build them with:
 
 ```sh
-./scripts/package.sh
+make release
 ```
 
-`make release` is an alias for `./scripts/package.sh`.
+`make release` is the local clean release gate. It removes generated state,
+builds the release artifacts, writes `dist/libpid0-<version>-CHECKSUMS`,
+verifies the checksum-listed artifacts, and smoke-tests the source archive.
 
-`./scripts/package.sh` builds the full release matrix by default:
+`./scripts/package.sh` builds and verifies the full release matrix by default:
 
 - x86_64 musl via `musl-gcc`
 - x86_64 glibc via the system `gcc`
@@ -177,6 +182,10 @@ Build them with:
 - aarch64 glibc via `aarch64-linux-gnu-gcc`
 - armhf musl via `arm-linux-musleabihf-gcc`
 - armhf glibc via `arm-linux-gnueabihf-gcc`
+
+Darwin arm64 is not currently a release target. `libpid0` is a Linux PID 1
+helper, and a Darwin artifact would need a separate product/runtime contract
+plus Mach-O package verification before it could be lifecycle-valid.
 
 You can also build subsets:
 
@@ -187,12 +196,21 @@ You can also build subsets:
 
 After packaging, `dist/libpid0-<version>-CHECKSUMS` is generated with
 `sha256sum` entries for the produced tarballs and gzipped single-header
-artifact, using basenames only.
+artifact, using basenames only. The checksum manifest is the release upload
+manifest.
 
 Each platform package contains headers, `libpid0.a`, shared libraries, CMake
-package metadata, documentation, and the license. `lib/libpid0.so` is a symlink
-to `libpid0.so.0`, and `lib/libpid0.so.0` is a symlink to the versioned shared
-library.
+package metadata, pkg-config metadata, documentation, and the license under
+`share/doc/libpid0/`. `lib/libpid0.so` is a symlink to `libpid0.so.0`, and
+`lib/libpid0.so.0` is a symlink to the versioned shared library.
+
+Useful lifecycle gates:
+
+```sh
+make package-verify
+make package-source-smoke
+make print-release-version
+```
 
 The test suite uses `cmocka` 2.x. The build first tries a system `cmocka`
 installation and falls back to fetching `cmocka-2.0.2`.

@@ -2,9 +2,20 @@ cmake_minimum_required(VERSION 3.28)
 
 set(PID0_DEFAULT_VERSION "0.0.0")
 set(PID0_PACKAGE_VERSION "${PID0_DEFAULT_VERSION}")
+set(PID0_VERSION_OVERRIDE "" CACHE STRING "Explicit release-candidate version override")
+if(NOT PID0_VERSION_OVERRIDE AND DEFINED ENV{PID0_VERSION_OVERRIDE})
+  set(PID0_VERSION_OVERRIDE "$ENV{PID0_VERSION_OVERRIDE}")
+endif()
+
+if(PID0_VERSION_OVERRIDE)
+  if(NOT PID0_VERSION_OVERRIDE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "PID0_VERSION_OVERRIDE must match X.Y.Z")
+  endif()
+  set(PID0_PACKAGE_VERSION "${PID0_VERSION_OVERRIDE}")
+endif()
 
 find_package(Git QUIET)
-if(Git_FOUND)
+if(NOT PID0_VERSION_OVERRIDE AND Git_FOUND)
   execute_process(
     COMMAND "${GIT_EXECUTABLE}" describe --tags --exact-match --match "v*" HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
@@ -17,6 +28,17 @@ if(Git_FOUND)
     string(SUBSTRING "${PID0_GIT_TAG}" 1 -1 PID0_PACKAGE_VERSION)
   endif()
 endif()
+if(NOT PID0_VERSION_OVERRIDE AND PID0_PACKAGE_VERSION STREQUAL PID0_DEFAULT_VERSION)
+  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/.git" AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/VERSION")
+    file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" PID0_SOURCE_VERSION)
+    string(STRIP "${PID0_SOURCE_VERSION}" PID0_SOURCE_VERSION)
+    if(PID0_SOURCE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+      set(PID0_PACKAGE_VERSION "${PID0_SOURCE_VERSION}")
+    else()
+      message(FATAL_ERROR "source archive VERSION must match X.Y.Z")
+    endif()
+  endif()
+endif()
 
 project(
   libpid0
@@ -27,9 +49,11 @@ project(
 
 include(GNUInstallDirs)
 include(CheckCSourceCompiles)
+include(CMakePackageConfigHelpers)
 
-option(PID0_BUILD_EXAMPLE "Build the example application" ON)
+option(PID0_BUILD_EXAMPLES "Build the example applications" ON)
 option(PID0_BUILD_TESTS "Build the test suite" ON)
+option(PID0_ENABLE_ASAN "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -43,6 +67,8 @@ set(PID0_SINGLE_HEADER_BUILD "${CMAKE_CURRENT_BINARY_DIR}/generated/include/libp
 set(PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/single-header/include")
 set(PID0_SINGLE_HEADER_BUILD_ALIAS "${PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR}/pid0/pid0.h")
 set(PID0_SINGLE_HEADER_DIST_GZ "${CMAKE_CURRENT_SOURCE_DIR}/dist/libpid0-${PROJECT_VERSION}.h.gz")
+set(PID0_CONFIG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/cmake")
+set(PID0_PKGCONFIG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/pkgconfig")
 set(PID0_FORMAT_SOURCES
   include/pid0/pid0.h
   src/pid0.c
@@ -69,6 +95,10 @@ check_c_source_compiles(
 
 set(PID0_PACKAGE_LIBC "auto" CACHE STRING "libc ABI label for package naming")
 set_property(CACHE PID0_PACKAGE_LIBC PROPERTY STRINGS auto musl gnu)
+set(PID0_TARGET_ID "" CACHE STRING "Release target identifier")
+set(PID0_TARGET_ARCH "" CACHE STRING "Release target architecture")
+set(PID0_TARGET_OS "" CACHE STRING "Release target operating system")
+set(PID0_TARGET_LIBC "" CACHE STRING "Release target libc ABI")
 
 if(PID0_PACKAGE_LIBC STREQUAL "auto")
   if(PID0_USING_GLIBC)
@@ -92,8 +122,14 @@ elseif(PID0_PACKAGE_ARCH MATCHES "^(armhf|armv7l|armv7-a|arm)$")
   set(PID0_PACKAGE_ARCH "armhf")
 endif()
 set(PID0_PACKAGE_BASENAME
-  "libpid0-${PROJECT_VERSION}-${PID0_PACKAGE_OS}-${PID0_PACKAGE_ARCH}-${PID0_PACKAGE_LIBC_NAME}"
+  "libpid0-${PROJECT_VERSION}-${PID0_PACKAGE_ARCH}-${PID0_PACKAGE_OS}-${PID0_PACKAGE_LIBC_NAME}"
 )
+if(PID0_TARGET_ID)
+  set(PID0_PACKAGE_TARGET_ID "${PID0_TARGET_ID}")
+else()
+  set(PID0_PACKAGE_TARGET_ID "${PID0_PACKAGE_ARCH}-${PID0_PACKAGE_OS}-${PID0_PACKAGE_LIBC_NAME}")
+endif()
+set(PID0_PACKAGE_BASENAME "libpid0-${PROJECT_VERSION}-${PID0_PACKAGE_TARGET_ID}")
 
 set(PID0_SINGLE_HEADER_SOURCE_PATHS "")
 foreach(pid0_source IN LISTS PID0_SOURCES)
@@ -119,9 +155,14 @@ function(pid0_configure_library target_name)
         -Wextra
         -Wpedantic
         -pedantic-errors
+        -Werror
     )
   endif()
   target_compile_definitions(${target_name} PUBLIC _POSIX_C_SOURCE=200809L)
+  if(PID0_ENABLE_ASAN AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(${target_name} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(${target_name} PRIVATE -fsanitize=address,undefined)
+  endif()
 endfunction()
 
 function(pid0_configure_c_executable target_name)
@@ -134,9 +175,14 @@ function(pid0_configure_c_executable target_name)
         -Wextra
         -Wpedantic
         -pedantic-errors
+        -Werror
     )
   endif()
   target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
+  if(PID0_ENABLE_ASAN AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(${target_name} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(${target_name} PRIVATE -fsanitize=address,undefined)
+  endif()
 endfunction()
 
 add_library(pid0_static STATIC ${PID0_SOURCES})
@@ -199,14 +245,40 @@ install(
   NAMESPACE pid0::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pid0
 )
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pid0Config.cmake.in"
+  "${PID0_CONFIG_BUILD_DIR}/pid0Config.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pid0
+  NO_CHECK_REQUIRED_COMPONENTS_MACRO
+)
+write_basic_package_version_file(
+  "${PID0_CONFIG_BUILD_DIR}/pid0ConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
+install(
+  FILES
+    "${PID0_CONFIG_BUILD_DIR}/pid0Config.cmake"
+    "${PID0_CONFIG_BUILD_DIR}/pid0ConfigVersion.cmake"
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pid0
+)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pid0.pc.in"
+  "${PID0_PKGCONFIG_BUILD_DIR}/pid0.pc"
+  @ONLY
+)
+install(
+  FILES "${PID0_PKGCONFIG_BUILD_DIR}/pid0.pc"
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)
 install(
   FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
     ${CMAKE_CURRENT_SOURCE_DIR}/README.md
-  DESTINATION ${CMAKE_INSTALL_DATADIR}/libpid0
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/libpid0
 )
 
-if(PID0_BUILD_EXAMPLE)
+if(PID0_BUILD_EXAMPLES)
   add_subdirectory(example)
 endif()
 

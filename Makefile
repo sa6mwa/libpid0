@@ -5,7 +5,7 @@ MAKEFLAGS += --no-builtin-rules
 
 DEV_PRESET := debug
 
-.PHONY: help print-release-version configure deps-debug deps-release deps-cross build build-debug build-release build-host test test-debug test-host test-all test-configure-lock test-cmocka-configure test-dependency-cache test-optional-dependency-cache test-toolchain-cache-recovery test-package-privacy valgrind asan fuzz fuzz-smoke format package package-single-header package-source package-source-smoke package-checksums package-verify verify-release-archives verify-release-privacy test-install-tree release-matrix finalize-slice release-pipeline prerelease prerelease-hardening container-example container-smoke-test release clean clean-dist
+.PHONY: help print-release-version configure deps-debug deps-release deps-cross build build-debug build-release build-host test test-debug test-host test-all test-configure-lock test-cmocka-configure test-dependency-cache test-optional-dependency-cache test-toolchain-cache-recovery test-toolchain-bootstrap test-aflpp-resolver test-package-checksums test-package-privacy valgrind asan fuzz fuzz-smoke format package package-single-header package-source package-source-smoke package-checksums package-verify verify-release-archives verify-release-privacy test-install-tree release-matrix finalize-slice release-pipeline prerelease prerelease-hardening container-example container-smoke-test release clean clean-dist
 
 help:
 	@printf '%s\n' \
@@ -27,6 +27,9 @@ help:
 		'make test-dependency-cache Verify shared dependency-cache behavior.' \
 		'make test-optional-dependency-cache Verify dependency-free configuration needs no dependency cache.' \
 		'make test-toolchain-cache-recovery Verify corrupt shared toolchain archives retry through download.' \
+		'make test-toolchain-bootstrap Verify the selected compiler uses only its Bootlin linker and sysroot libc.' \
+		'make test-aflpp-resolver Verify AFL++ cache identity and publication locking.' \
+		'make test-package-checksums Verify standalone checksum generation lists every release artifact.' \
 		'make test-package-privacy Verify cache paths are rejected from release artifacts.' \
 		'make valgrind       Run native x86_64 Linux memory checks.' \
 		'make asan           Build and run the ASan/UBSan preset.' \
@@ -86,7 +89,7 @@ test-debug: test
 test-host: build-host
 	./scripts/test.sh release
 
-test-all: test test-configure-lock test-cmocka-configure test-optional-dependency-cache test-toolchain-cache-recovery test-host asan valgrind fuzz-smoke test-dependency-cache test-package-privacy
+test-all: test test-configure-lock test-cmocka-configure test-optional-dependency-cache test-toolchain-cache-recovery test-toolchain-bootstrap test-aflpp-resolver test-package-checksums test-host asan valgrind fuzz-smoke test-dependency-cache test-package-privacy release-matrix
 
 test-configure-lock:
 	./scripts/test-configure-lock.sh
@@ -102,6 +105,15 @@ test-optional-dependency-cache:
 
 test-toolchain-cache-recovery:
 	./scripts/test-toolchain-cache-recovery.sh
+
+test-toolchain-bootstrap:
+	./scripts/test-toolchain-bootstrap.sh
+
+test-aflpp-resolver:
+	./scripts/test-aflpp-resolver.sh
+
+test-package-checksums:
+	./scripts/test-package-checksums.sh
 
 test-package-privacy:
 	./scripts/test-package-privacy.sh
@@ -120,7 +132,7 @@ fuzz:
 
 fuzz-smoke: fuzz
 	rm -rf build/fuzz/afl-out
-	"$$(./scripts/cpkt-aflpp.sh discover | awk -F= '$$1 == "afl_fuzz" { print $$2 }')" -V 5 -i fuzz/seeds -o build/fuzz/afl-out -- build/fuzz/fuzz/pid0-stop-timeout-fuzz
+	AFL_NO_AFFINITY=1 "$$(./scripts/cpkt-aflpp.sh discover | awk -F= '$$1 == "afl_fuzz" { print $$2 }')" -V 5 -i fuzz/seeds -o build/fuzz/afl-out -- build/fuzz/fuzz/pid0-stop-timeout-fuzz
 
 format:
 	cmake --preset $(DEV_PRESET)
@@ -155,7 +167,7 @@ release-matrix: package
 
 finalize-slice: format test
 
-release-pipeline: format test-all release-matrix package-source-smoke
+release-pipeline: format test-all package-source-smoke
 
 prerelease: release-pipeline
 

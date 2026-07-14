@@ -11,6 +11,7 @@ set(checksums_path "${dist_dir}/${checksums_name}")
 
 file(MAKE_DIRECTORY "${dist_dir}")
 file(GLOB release_entries RELATIVE "${dist_dir}"
+  "${dist_dir}/libpid0-${PID0_VERSION}.tar.gz"
   "${dist_dir}/libpid0-${PID0_VERSION}-*.tar.gz"
   "${dist_dir}/libpid0-${PID0_VERSION}.h.gz"
 )

@@ -62,6 +62,8 @@ require_pattern 'cpkt-linux\.cmake' "${presets_path}"
 require_pattern 'pid0-configure\.lock' "${repo_root}/CMakeLists.txt"
 require_pattern 'cpkt-toolchains\.sh' "${toolchain_path}"
 require_pattern 'CPKT_DEPENDENCY_CACHE' "${dependency_path}"
+require_pattern 'print-file-name=libc.so' "${toolchain_path}"
+require_pattern 'Pinned compiler selected a libc outside its sysroot' "${toolchain_path}"
 require_pattern 'PYTHONDONTWRITEBYTECODE=1' "${repo_root}/scripts/test-dependency-cache.sh"
 require_pattern 'scripts/__pycache__' "${repo_root}/scripts/clean.sh"
 require_pattern 'file\(LOCK' "${dependency_path}"
@@ -76,6 +78,8 @@ reject_pattern 'GIT_REPOSITORY|pkg_check_modules\(CMOCKA' "${repo_root}/tests/CM
 reject_pattern 'git ls-files --cached --others' "${repo_root}/scripts/package.sh"
 require_pattern 'RELEASE_MANIFEST' "${repo_root}/scripts/test_release_from_source.sh"
 require_pattern 'grep -R -a' "${repo_root}/scripts/package-verify.sh"
+require_pattern 'pid0::pid0_shared' "${repo_root}/scripts/package-verify.sh"
+require_pattern 'libpid0-.*PID0_VERSION.*tar' "${repo_root}/cmake/package_checksums.cmake"
 require_pattern 'discover_target_tools\.sh" --target-id' "${repo_root}/scripts/package-verify.sh"
 require_pattern 'assert_elf_rpath_rejected' "${repo_root}/scripts/test-package-privacy.sh"
 require_pattern '^\.NOTPARALLEL:' "${repo_root}/Makefile"
@@ -88,11 +92,15 @@ require_pattern '^test-cmocka-configure:$' "${repo_root}/Makefile"
 require_pattern '^test-dependency-cache:$' "${repo_root}/Makefile"
 require_pattern '^test-optional-dependency-cache:$' "${repo_root}/Makefile"
 require_pattern '^test-toolchain-cache-recovery:$' "${repo_root}/Makefile"
+require_pattern '^test-toolchain-bootstrap:$' "${repo_root}/Makefile"
+require_pattern '^test-aflpp-resolver:$' "${repo_root}/Makefile"
+require_pattern '^test-package-checksums:$' "${repo_root}/Makefile"
 require_pattern '^test-package-privacy:$' "${repo_root}/Makefile"
 require_pattern '^fuzz-smoke: fuzz$' "${repo_root}/Makefile"
 require_pattern 'cpkt-aflpp\.cmake' "${presets_path}"
-require_pattern 'acquire_cache_lock' "${repo_root}/scripts/cpkt-toolchains.sh"
-require_pattern 'acquire_cache_lock' "${repo_root}/scripts/cpkt-aflpp.sh"
+require_pattern 'CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600' "${repo_root}/scripts/cpkt-toolchains.sh"
+require_pattern 'collection_id' "${repo_root}/scripts/cpkt-aflpp.sh"
+require_pattern 'CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600' "${repo_root}/scripts/cpkt-aflpp.sh"
 [[ -x "${repo_root}/scripts/test-dependency-cache.sh" ]] || {
   printf 'verify-lifecycle.sh: missing executable dependency-cache contract test\n' >&2
   exit 1
@@ -107,6 +115,18 @@ require_pattern 'acquire_cache_lock' "${repo_root}/scripts/cpkt-aflpp.sh"
 }
 [[ -x "${repo_root}/scripts/test-configure-lock.sh" ]] || {
   printf 'verify-lifecycle.sh: missing executable configure-lock contract test\n' >&2
+  exit 1
+}
+[[ -x "${repo_root}/scripts/test-toolchain-bootstrap.sh" ]] || {
+  printf 'verify-lifecycle.sh: missing executable toolchain bootstrap contract test\n' >&2
+  exit 1
+}
+[[ -x "${repo_root}/scripts/test-aflpp-resolver.sh" ]] || {
+  printf 'verify-lifecycle.sh: missing executable AFL++ resolver contract test\n' >&2
+  exit 1
+}
+[[ -x "${repo_root}/scripts/test-package-checksums.sh" ]] || {
+  printf 'verify-lifecycle.sh: missing executable checksum-manifest contract test\n' >&2
   exit 1
 }
 [[ -x "${repo_root}/scripts/test-cmocka-configure.sh" ]] || {

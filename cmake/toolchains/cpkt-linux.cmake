@@ -90,3 +90,22 @@ if(pid0_ld_inside_root EQUAL -1)
     "Pinned compiler selected a linker outside its collection: ${pid0_reported_ld}"
   )
 endif()
+
+execute_process(
+  COMMAND "${pid0_cc}" "--sysroot=${pid0_sysroot}" -print-file-name=libc.so
+  OUTPUT_VARIABLE pid0_reported_libc
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT EXISTS "${pid0_reported_libc}")
+  message(FATAL_ERROR
+    "Pinned compiler did not report a usable libc inside its sysroot: ${pid0_reported_libc}"
+  )
+endif()
+file(REAL_PATH "${pid0_sysroot}" pid0_sysroot_real)
+file(REAL_PATH "${pid0_reported_libc}" pid0_reported_libc_real)
+string(FIND "${pid0_reported_libc_real}" "${pid0_sysroot_real}/" pid0_libc_inside_sysroot)
+if(pid0_libc_inside_sysroot EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned compiler selected a libc outside its sysroot: ${pid0_reported_libc_real}"
+  )
+endif()

@@ -21,6 +21,13 @@ main() {
   local fake_bin=""
 
   [[ -x "${resolver}" ]] || fail "missing resolver: ${resolver}"
+  bash -n "${resolver}"
+  grep -Fq 'CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600' "${resolver}" ||
+    fail "resolver does not use the lifecycle cache-lock timeout"
+  grep -Fq 'with_cache_lock "$(cache_root)/locks/bootlin-$name.lock" install_bootlin_locked "$target"' "${resolver}" ||
+    fail "resolver does not serialize Bootlin root publication"
+  grep -Fq 'if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then' "${resolver}" ||
+    fail "resolver does not recheck Bootlin readiness while holding the cache lock"
   tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/libpid0-toolchain-cache-recovery.XXXXXX")"
   cache_root="${tmp_root}/cache"
   archive="${cache_root}/archives/x86-64--glibc--stable-2025.08-1.tar.xz"

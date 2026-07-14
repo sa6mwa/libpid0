@@ -119,8 +119,10 @@ set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 find_package(pid0 CONFIG REQUIRED)
-add_executable(pid0_consumer main.c)
-target_link_libraries(pid0_consumer PRIVATE pid0::pid0_static)
+add_executable(pid0_static_consumer main.c)
+target_link_libraries(pid0_static_consumer PRIVATE pid0::pid0_static)
+add_executable(pid0_shared_consumer main.c)
+target_link_libraries(pid0_shared_consumer PRIVATE pid0::pid0_shared)
 EOF
   cat > "${consumer_dir}/main.c" <<'EOF'
 #include <pid0/pid0.h>
@@ -202,7 +204,8 @@ verify_binary_archive() {
   assert_root_owned "${archive_path}"
 
   scan_forbidden_paths "${sdk_root}" "${artifact_name}"
-  tool_description="$("${script_dir}/discover_target_tools.sh" --target-id "${target_id%.tar.gz}")"
+  tool_description="$("${script_dir}/discover_target_tools.sh" --target-id "${target_id%.tar.gz}" \
+    --build-dir "${repo_root}/build/${target_id%.tar.gz}-release")"
   readelf_bin="$(awk -F= '$1 == "READELF" { print $2 }' <<<"${tool_description}")"
   verify_elf_metadata "${sdk_root}" "${artifact_name}" "${readelf_bin}"
 

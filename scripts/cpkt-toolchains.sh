@@ -42,22 +42,22 @@ download_file() {
   fi
 }
 
-acquire_cache_lock() {
-  local lock_path=$1 out_variable=$2 descriptor
-
-  command -v flock >/dev/null 2>&1 || die 'flock is required to synchronize the shared toolchain cache'
-  mkdir -p "$(dirname -- "$lock_path")"
-  exec {descriptor}>"$lock_path"
-  if ! flock -w 120 "$descriptor"; then
-    eval "exec ${descriptor}>&-"
-    die "timed out waiting for shared cache lock: $lock_path"
-  fi
-  printf -v "$out_variable" '%s' "$descriptor"
+install_cleanup_trap() {
+  local path=$1 remove_option=$2 cleanup
+  printf -v cleanup 'status=$?; rm %s -- %q || :; trap - EXIT HUP INT TERM; exit "$status"' \
+    "$remove_option" "$path"
+  trap "$cleanup" EXIT
+  trap 'exit 1' HUP INT TERM
 }
 
-release_cache_lock() {
-  local lock_fd=$1
-
+with_cache_lock() {
+  local lock_path=$1 lock_fd
+  shift
+  command -v flock >/dev/null 2>&1 || die 'flock is required to provision shared Linux toolchains'
+  mkdir -p "$(dirname -- "$lock_path")"
+  exec {lock_fd}>"$lock_path"
+  flock -w "${CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600}" "$lock_fd" || die "timed out waiting for shared toolchain lock: $lock_path"
+  "$@"
   flock -u "$lock_fd"
   eval "exec ${lock_fd}>&-"
 }
@@ -163,27 +163,36 @@ osxcross_candidate() {
 }
 
 install_bootlin() {
-  local target=$1 values arch name sha256 prefix sysroot_rel root archive_dir archive tmp extract actual lock_fd
+  local target=$1 values arch name sha256 prefix sysroot_rel root
   values=$(bootlin_values "$target")
   IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
-  archive_dir="$(cache_root)/archives"
-  mkdir -p "$archive_dir" "$(cache_root)/roots"
-  acquire_cache_lock "$(cache_root)/locks/${name}.lock" lock_fd
   if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
-    release_cache_lock "$lock_fd"
+    return
+  fi
+  with_cache_lock "$(cache_root)/locks/bootlin-$name.lock" install_bootlin_locked "$target"
+}
+
+install_bootlin_locked() {
+  local target=$1 values arch name sha256 prefix sysroot_rel root archive_dir archive tmp extract actual
+  values=$(bootlin_values "$target")
+  IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
+  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
     return
   fi
 
+  archive_dir="$(cache_root)/archives"
   archive="$archive_dir/$name.tar.xz"
+  mkdir -p "$archive_dir" "$(cache_root)/roots"
   if [[ -f "$archive" ]]; then
     actual=$(sha256_file "$archive")
     if [[ "$actual" != "$sha256" ]]; then
-      rm -f "$archive"
+      printf 'cpkt-toolchains: discarding corrupt cached archive: %s\n' "$archive" >&2
+      rm -f -- "$archive"
     fi
   fi
   if [[ ! -f "$archive" ]]; then
     tmp="$archive.tmp.$$"
-    trap 'rm -f "$tmp"' EXIT HUP INT TERM
+    install_cleanup_trap "$tmp" -f
     download_file "https://toolchains.bootlin.com/downloads/releases/toolchains/$arch/tarballs/$name.tar.xz" "$tmp"
     actual=$(sha256_file "$tmp")
     [[ "$actual" == "$sha256" ]] || die "checksum mismatch for $name.tar.xz: expected $sha256, got $actual"
@@ -192,7 +201,7 @@ install_bootlin() {
   fi
 
   extract="$(cache_root)/roots/.extract-$name.$$"
-  trap 'rm -rf "$extract"' EXIT HUP INT TERM
+  install_cleanup_trap "$extract" -rf
   mkdir -p "$extract"
   tar -C "$extract" -xf "$archive"
   [[ -d "$extract/$name/bin" ]] || die "unexpected archive layout for $name.tar.xz"
@@ -201,7 +210,6 @@ install_bootlin() {
   rm -rf "$extract"
   trap - EXIT HUP INT TERM
   bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" || die "incomplete extracted Bootlin toolchain: $root"
-  release_cache_lock "$lock_fd"
 }
 
 print_bootlin_target() {

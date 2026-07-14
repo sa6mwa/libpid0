@@ -39,7 +39,7 @@ clean_dist() {
 }
 
 build_single_header() {
-  cmake --fresh --preset release
+  cmake --fresh --preset release -DPID0_DIST_DIR="${dist_dir}"
   cmake --build --preset release --target package-single-header
 }
 
@@ -75,22 +75,25 @@ stage_source_archive() {
   local stage_dir="$2"
   local payload_root="${stage_dir}/libpid0-${version}"
   local manifest_path="${payload_root}/RELEASE_MANIFEST"
+  local manifest_entries="${stage_dir}/release-manifest-entries"
   local file_path=""
 
   mkdir -p "${payload_root}"
   (
     cd "${repo_root}"
-    git ls-files | LC_ALL=C sort
-  ) > "${manifest_path}.tmp"
+    git ls-files --cached | while IFS= read -r file_path; do
+      [[ -e "${repo_root}/${file_path}" || -L "${repo_root}/${file_path}" ]] &&
+        printf '%s\n' "${file_path}"
+    done | LC_ALL=C sort
+  ) > "${manifest_entries}"
 
   while IFS= read -r file_path; do
     mkdir -p "${payload_root}/$(dirname -- "${file_path}")"
     cp -p "${repo_root}/${file_path}" "${payload_root}/${file_path}"
-  done < "${manifest_path}.tmp"
+  done < "${manifest_entries}"
 
-  printf '%s\n' "VERSION" "RELEASE_MANIFEST" >> "${manifest_path}.tmp"
-  LC_ALL=C sort -o "${manifest_path}.tmp" "${manifest_path}.tmp"
-  mv "${manifest_path}.tmp" "${manifest_path}"
+  printf '%s\n' "VERSION" "RELEASE_MANIFEST" >> "${manifest_entries}"
+  LC_ALL=C sort -o "${manifest_path}" "${manifest_entries}"
   printf '%s\n' "${version}" > "${payload_root}/VERSION"
 }
 

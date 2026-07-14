@@ -31,11 +31,23 @@ tmp_root="$(mktemp -d "${dist_dir}/.source-smoke.XXXXXX")"
 tar -xzf "${dist_dir}/${source_artifact}" -C "${tmp_root}"
 source_root="${tmp_root}/libpid0-${version}"
 
-cmake -S "${source_root}" -B "${tmp_root}/build" -G Ninja -DPID0_BUILD_EXAMPLES=ON -DPID0_BUILD_TESTS=ON >/dev/null
-cmake --build "${tmp_root}/build" >/dev/null
-ctest --test-dir "${tmp_root}/build" --output-on-failure
+(
+  cd "${source_root}"
+  find . -mindepth 1 \( -type f -o -type l \) -printf '%P\n' | LC_ALL=C sort
+) > "${tmp_root}/source-archive-files"
+cmp -s "${source_root}/RELEASE_MANIFEST" "${tmp_root}/source-archive-files" || {
+  printf 'test_release_from_source.sh: source archive payload does not exactly match RELEASE_MANIFEST\n' >&2
+  exit 1
+}
 
-configured_version="$(awk -F= '$1 ~ "^CMAKE_PROJECT_VERSION:" { print $2; exit }' "${tmp_root}/build/CMakeCache.txt")"
+(
+  cd "${source_root}"
+  cmake --fresh --preset debug >/dev/null
+  cmake --build --preset debug >/dev/null
+  ctest --preset debug
+)
+
+configured_version="$(awk -F= '$1 ~ "^CMAKE_PROJECT_VERSION:" { print $2; exit }' "${source_root}/build/debug/CMakeCache.txt")"
 if [[ "${configured_version}" != "${version}" ]]; then
   printf 'test_release_from_source.sh: configured version %s != archive version %s\n' "${configured_version}" "${version}" >&2
   exit 1

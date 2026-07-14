@@ -76,8 +76,11 @@ Useful presets:
 - `armhf-linux-gnu-release`
 - `armhf-linux-musl-release`
 
-`debug` and `release` prefer `musl-gcc` automatically and fall back to the system
-compiler only when musl is unavailable.
+Every Linux preset uses its matching checksum-pinned Bootlin GCC collection.
+The lifecycle resolver caches complete compiler, linker, binutils, libc, and
+headers under `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`;
+it never falls back to a host or distro compiler. `debug`, `release`, and
+`valgrind` use the native `x86_64-linux-gnu` collection.
 
 `static-release` is the preset used for the scratch-container example.
 
@@ -173,15 +176,18 @@ make release
 `make release` is the local clean release gate. It removes generated state,
 builds the release artifacts, writes `dist/libpid0-<version>-CHECKSUMS`,
 verifies the checksum-listed artifacts, and smoke-tests the source archive.
+`make prerelease` runs that same proof graph without the initial clean; use it
+for iterative release-equivalent feedback.
 
-`./scripts/package.sh` builds and verifies the full release matrix by default:
+`./scripts/package.sh` builds and verifies the full release matrix by default
+from the pinned Bootlin collections:
 
-- x86_64 musl via `musl-gcc`
-- x86_64 glibc via the system `gcc`
-- aarch64 musl via `aarch64-linux-musl-gcc`
-- aarch64 glibc via `aarch64-linux-gnu-gcc`
-- armhf musl via `arm-linux-musleabihf-gcc`
-- armhf glibc via `arm-linux-gnueabihf-gcc`
+- x86_64 musl
+- x86_64 glibc
+- aarch64 musl
+- aarch64 glibc
+- armhf musl
+- armhf glibc
 
 Darwin arm64 is not currently a release target. `libpid0` is a Linux PID 1
 helper, and a Darwin artifact would need a separate product/runtime contract
@@ -207,13 +213,15 @@ package metadata, pkg-config metadata, documentation, and the license under
 Useful lifecycle gates:
 
 ```sh
+make valgrind
 make package-verify
 make package-source-smoke
 make print-release-version
 ```
 
-The test suite uses `cmocka` 2.x. The build first tries a system `cmocka`
-installation and falls back to fetching `cmocka-2.0.2`.
+The test suite uses the checksum-pinned upstream `cmocka` 2.0.2 archive. It is
+verified and shared under `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`;
+extraction and build state remain disposable under `.cache/`.
 
 Some PID namespace integration tests require `unshare` with sufficient kernel
 permissions. When that is not available, those tests are skipped instead of

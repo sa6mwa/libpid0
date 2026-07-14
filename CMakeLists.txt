@@ -40,6 +40,13 @@ if(NOT PID0_VERSION_OVERRIDE AND PID0_PACKAGE_VERSION STREQUAL PID0_DEFAULT_VERS
   endif()
 endif()
 
+file(LOCK "${CMAKE_BINARY_DIR}/.pid0-configure.lock" GUARD PROCESS TIMEOUT 120
+  RESULT_VARIABLE PID0_CONFIGURE_LOCK_RESULT)
+if(NOT PID0_CONFIGURE_LOCK_RESULT STREQUAL "0")
+  message(FATAL_ERROR
+    "Unable to acquire configure lock for ${CMAKE_BINARY_DIR}: ${PID0_CONFIGURE_LOCK_RESULT}")
+endif()
+
 project(
   libpid0
   VERSION ${PID0_PACKAGE_VERSION}
@@ -54,10 +61,10 @@ include(CMakePackageConfigHelpers)
 option(PID0_BUILD_EXAMPLES "Build the example applications" ON)
 option(PID0_BUILD_TESTS "Build the test suite" ON)
 option(PID0_ENABLE_ASAN "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(PID0_BUILD_FUZZERS "Build native AFL++ fuzzers" OFF)
+set(PID0_DEPENDENCY_BUILD_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.cache/deps/${PID0_TARGET_ID}"
+  CACHE PATH "Disposable target-specific dependency build roots")
 
-set(CMAKE_C_STANDARD 90)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_definitions(_POSIX_C_SOURCE=200809L)
@@ -66,7 +73,9 @@ set(PID0_SOURCES src/pid0.c)
 set(PID0_SINGLE_HEADER_BUILD "${CMAKE_CURRENT_BINARY_DIR}/generated/include/libpid0_single_header.h")
 set(PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/single-header/include")
 set(PID0_SINGLE_HEADER_BUILD_ALIAS "${PID0_SINGLE_HEADER_ALIAS_INCLUDE_DIR}/pid0/pid0.h")
-set(PID0_SINGLE_HEADER_DIST_GZ "${CMAKE_CURRENT_SOURCE_DIR}/dist/libpid0-${PROJECT_VERSION}.h.gz")
+set(PID0_DIST_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/dist" CACHE PATH
+  "Release artifact directory for this configuration")
+set(PID0_SINGLE_HEADER_DIST_GZ "${PID0_DIST_DIR}/libpid0-${PROJECT_VERSION}.h.gz")
 set(PID0_CONFIG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/cmake")
 set(PID0_PKGCONFIG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/pkgconfig")
 set(PID0_FORMAT_SOURCES
@@ -155,8 +164,9 @@ function(pid0_configure_library target_name)
         -Wextra
         -Wpedantic
         -pedantic-errors
-        -Werror
+      -Werror
     )
+    target_link_options(${target_name} PRIVATE -Wl,--fatal-warnings)
   endif()
   target_compile_definitions(${target_name} PUBLIC _POSIX_C_SOURCE=200809L)
   if(PID0_ENABLE_ASAN AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
@@ -175,8 +185,9 @@ function(pid0_configure_c_executable target_name)
         -Wextra
         -Wpedantic
         -pedantic-errors
-        -Werror
+      -Werror
     )
+    target_link_options(${target_name} PRIVATE -Wl,--fatal-warnings)
   endif()
   target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
   if(PID0_ENABLE_ASAN AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
@@ -283,8 +294,19 @@ if(PID0_BUILD_EXAMPLES)
 endif()
 
 if(PID0_BUILD_TESTS)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CPKTDependencies.cmake")
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(PID0_BUILD_FUZZERS)
+  add_executable(pid0-stop-timeout-fuzz fuzz/pid0_stop_timeout_fuzz.c src/pid0.c)
+  target_include_directories(pid0-stop-timeout-fuzz PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  pid0_configure_c_executable(pid0-stop-timeout-fuzz)
+  set_target_properties(pid0-stop-timeout-fuzz PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/fuzz)
 endif()
 
 set(CPACK_GENERATOR "TGZ")
@@ -301,6 +323,13 @@ if(CLANG_FORMAT_BIN)
     COMMAND "${CLANG_FORMAT_BIN}" -i ${PID0_FORMAT_SOURCES}
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Formatting libpid0 source files with clang-format"
+  )
+else()
+  add_custom_target(
+    format
+    COMMAND ${CMAKE_COMMAND} -E echo "clang-format is required for make format"
+    COMMAND ${CMAKE_COMMAND} -E false
+    COMMENT "Checking the clang-format prerequisite"
   )
 endif()
 

@@ -1,43 +1,58 @@
 include(FetchContent)
 
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-  pkg_check_modules(CMOCKA QUIET cmocka>=2.0)
+check_c_source_compiles(
+  "
+  #include <stdint.h>
+  int main(void) {
+    uintptr_t value = 0;
+    return (int)value;
+  }
+  "
+  PID0_HAS_UINTPTR_T
+)
+if(NOT PID0_HAS_UINTPTR_T)
+  message(FATAL_ERROR "The selected C toolchain must provide uintptr_t for cmocka")
 endif()
 
-if(CMOCKA_FOUND)
-  add_library(pid0_cmocka INTERFACE)
-  target_include_directories(pid0_cmocka SYSTEM INTERFACE ${CMOCKA_INCLUDE_DIRS})
-  target_link_libraries(pid0_cmocka INTERFACE ${CMOCKA_LINK_LIBRARIES})
-  target_link_options(pid0_cmocka INTERFACE ${CMOCKA_LDFLAGS_OTHER})
+pid0_acquire_verified_archive(
+  cmocka
+  "https://cmocka.org/files/2.0/cmocka-2.0.2.tar.xz"
+  "39f92f366bdf3f1a02af4da75b4a5c52df6c9f7e736c7d65de13283f9f0ef416"
+  PID0_CMOCKA_ARCHIVE
+)
+pid0_stage_verified_archive(
+  cmocka
+  "2.0.2"
+  "39f92f366bdf3f1a02af4da75b4a5c52df6c9f7e736c7d65de13283f9f0ef416"
+  "${PID0_CMOCKA_ARCHIVE}"
+  PID0_CMOCKA_SOURCE
+)
+set(WITH_CMOCKERY_SUPPORT OFF CACHE BOOL "" FORCE)
+set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WITH_MALLOC_OVERRIDE OFF CACHE BOOL "" FORCE)
+set(WITH_STATIC_LIB ON CACHE BOOL "" FORCE)
+set(WITH_TESTS OFF CACHE BOOL "" FORCE)
+# Cmocka 2.0.2 probes this with CheckTypeSize.  Supply the result from the
+# project-owned capability check so a clean configure does not depend on that
+# upstream generated-source probe.
+set(HAVE_UINTPTR_T TRUE)
+set(UINTPTR_T "${CMAKE_SIZEOF_VOID_P}")
+FetchContent_Declare(cmocka SOURCE_DIR "${PID0_CMOCKA_SOURCE}")
+FetchContent_MakeAvailable(cmocka)
+unset(UINTPTR_T)
+unset(HAVE_UINTPTR_T)
+
+if(TARGET cmocka::cmocka)
+  set(PID0_CMOCKA_TARGET cmocka::cmocka)
+elseif(TARGET cmocka)
+  set(PID0_CMOCKA_TARGET cmocka)
+elseif(TARGET cmocka-static)
+  add_library(pid0_cmocka ALIAS cmocka-static)
   set(PID0_CMOCKA_TARGET pid0_cmocka)
 else()
-  set(WITH_CMOCKERY_SUPPORT OFF CACHE BOOL "" FORCE)
-  set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(WITH_MALLOC_OVERRIDE OFF CACHE BOOL "" FORCE)
-  set(WITH_STATIC_LIB ON CACHE BOOL "" FORCE)
-  set(WITH_TESTS OFF CACHE BOOL "" FORCE)
-
-  FetchContent_Declare(
-    cmocka
-    GIT_REPOSITORY https://gitlab.com/cmocka/cmocka.git
-    GIT_TAG cmocka-2.0.2
-    GIT_SHALLOW TRUE
-  )
-  FetchContent_MakeAvailable(cmocka)
-
-  if(TARGET cmocka::cmocka)
-    set(PID0_CMOCKA_TARGET cmocka::cmocka)
-  elseif(TARGET cmocka)
-    set(PID0_CMOCKA_TARGET cmocka)
-  elseif(TARGET cmocka-static)
-    add_library(pid0_cmocka ALIAS cmocka-static)
-    set(PID0_CMOCKA_TARGET pid0_cmocka)
-  else()
-    message(FATAL_ERROR "Unable to determine the cmocka target name")
-  endif()
-  set(PID0_CMOCKA_SYSTEM_INCLUDE_DIR "${cmocka_SOURCE_DIR}/include")
+  message(FATAL_ERROR "Unable to determine the cmocka target name")
 endif()
+set(PID0_CMOCKA_SYSTEM_INCLUDE_DIR "${PID0_CMOCKA_SOURCE}/include")
 
 add_executable(pid0-test-helper pid0_test_helper.c)
 target_link_libraries(pid0-test-helper PRIVATE pid0::pid0)

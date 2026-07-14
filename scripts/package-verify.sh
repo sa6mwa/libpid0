@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
-dist_dir="${repo_root}/dist"
+dist_dir="${PID0_DIST_DIR:-${repo_root}/dist}"
 tmp_root=""
 
 cleanup() {
@@ -61,14 +61,19 @@ artifact_version() {
 scan_forbidden_paths() {
   local scan_root="$1"
   local artifact_name="$2"
-  local escaped_repo=""
-  local escaped_home=""
+  local dependency_cache="${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-${HOME}/.cache}/c.pkt.systems/deps}"
+  local toolchain_cache="${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-${HOME}/.cache}/c.pkt.systems/toolchains}"
+  local forbidden_path=""
+  local escaped_path=""
+  local -a forbidden_patterns=()
   local grep_output=""
 
-  escaped_repo="$(printf '%s\n' "${repo_root}" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
-  escaped_home="$(printf '%s\n' "${HOME}" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
+  for forbidden_path in "${repo_root}" "${HOME}" "${dependency_cache}" "${toolchain_cache}"; do
+    escaped_path="$(printf '%s\n' "${forbidden_path}" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
+    forbidden_patterns+=("${escaped_path}" "file://${escaped_path}")
+  done
 
-  grep_output="$(grep -R -I -n -E "${escaped_repo}|${escaped_home}|file://${escaped_repo}|file://${escaped_home}" "${scan_root}" 2>/dev/null || true)"
+  grep_output="$(grep -R -a -n -E "$(IFS='|'; printf '%s' "${forbidden_patterns[*]}")" "${scan_root}" 2>/dev/null || true)"
   if [[ -n "${grep_output}" ]]; then
     printf '%s\n' "${grep_output}" | sed -n '1,10p' >&2
     fail "${artifact_name} contains local path material"
@@ -78,18 +83,17 @@ scan_forbidden_paths() {
 verify_elf_metadata() {
   local extract_root="$1"
   local artifact_name="$2"
+  local readelf_bin="$3"
   local elf_path=""
   local metadata=""
 
-  if ! command -v readelf >/dev/null 2>&1; then
-    fail "readelf is required to verify ELF runtime metadata for ${artifact_name}"
-  fi
+  [[ -x "${readelf_bin}" ]] || fail "target readelf is unavailable for ${artifact_name}: ${readelf_bin}"
 
   while IFS= read -r -d '' elf_path; do
     if ! file "${elf_path}" | grep -Eq 'ELF .* (executable|shared object)'; then
       continue
     fi
-    metadata="$(readelf -d "${elf_path}" 2>/dev/null || true)"
+    metadata="$("${readelf_bin}" -d "${elf_path}" 2>/dev/null || true)"
     if printf '%s\n' "${metadata}" | grep -Eq 'RPATH|RUNPATH'; then
       if printf '%s\n' "${metadata}" | grep -Ev '\$ORIGIN' | grep -Eq 'RPATH|RUNPATH'; then
         fail "${artifact_name} contains non-relocatable ELF runtime path in ${elf_path}"
@@ -166,18 +170,6 @@ EOF
   )
 }
 
-configured_compiler_for_target() {
-  local target_id="$1"
-  local preset="${target_id}-release"
-  local cache_path="${repo_root}/build/${preset}/CMakeCache.txt"
-
-  if [[ -f "${cache_path}" ]]; then
-    awk -F= '$1 ~ "^CMAKE_C_COMPILER:" { print $2; exit }' "${cache_path}"
-    return
-  fi
-  printf 'cc\n'
-}
-
 verify_binary_archive() {
   local artifact_name="$1"
   local version="$2"
@@ -187,6 +179,8 @@ verify_binary_archive() {
   local extract_dir="${tmp_root}/extract-${target_id%.tar.gz}"
   local sdk_root="${extract_dir}/${root}"
   local compiler=""
+  local readelf_bin=""
+  local tool_description=""
 
   mkdir -p "${extract_dir}"
   tar -xzf "${archive_path}" -C "${extract_dir}"
@@ -208,9 +202,11 @@ verify_binary_archive() {
   assert_root_owned "${archive_path}"
 
   scan_forbidden_paths "${sdk_root}" "${artifact_name}"
-  verify_elf_metadata "${sdk_root}" "${artifact_name}"
+  tool_description="$("${script_dir}/discover_target_tools.sh" --target-id "${target_id%.tar.gz}")"
+  readelf_bin="$(awk -F= '$1 == "READELF" { print $2 }' <<<"${tool_description}")"
+  verify_elf_metadata "${sdk_root}" "${artifact_name}" "${readelf_bin}"
 
-  compiler="$(configured_compiler_for_target "${target_id%.tar.gz}")"
+  compiler="$(awk -F= '$1 == "CC" { print $2 }' <<<"${tool_description}")"
   if [[ -n "${compiler}" ]] && command -v "${compiler}" >/dev/null 2>&1; then
     verify_cmake_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}"
     verify_pkg_config_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}"
@@ -238,6 +234,12 @@ verify_source_archive() {
   while IFS= read -r listed; do
     [[ -e "${source_root}/${listed}" ]] || fail "source archive manifest lists missing file: ${listed}"
   done < "${manifest_file}"
+  (
+    cd "${source_root}"
+    find . -mindepth 1 \( -type f -o -type l \) -printf '%P\n' | LC_ALL=C sort
+  ) > "${tmp_root}/source-archive-files"
+  cmp -s "${manifest_file}" "${tmp_root}/source-archive-files" ||
+    fail "source archive payload does not exactly match RELEASE_MANIFEST"
 
   [[ ! -d "${source_root}/.git" ]] || fail "source archive contains .git"
   [[ ! -d "${source_root}/build" ]] || fail "source archive contains build"
@@ -273,6 +275,7 @@ main() {
   checksum_count="$(find "${dist_dir}" -mindepth 1 -maxdepth 1 -type f -name 'libpid0-*-CHECKSUMS' | wc -l)"
   [[ "${checksum_count}" == "1" ]] || fail "expected exactly one checksum manifest in ${dist_dir}, found ${checksum_count}"
   checksum_file="$(find "${dist_dir}" -mindepth 1 -maxdepth 1 -type f -name 'libpid0-*-CHECKSUMS' -print)"
+  scan_forbidden_paths "${checksum_file}" "$(basename -- "${checksum_file}")"
 
   (
     cd "${dist_dir}"
@@ -282,6 +285,14 @@ main() {
   mapfile -t listed_artifacts < <(awk '{ print $2 }' "${checksum_file}" | LC_ALL=C sort)
   ((${#listed_artifacts[@]} > 0)) || fail "checksum manifest is empty"
   version="$(artifact_version "${listed_artifacts[0]}")"
+
+  while IFS= read -r release_artifact; do
+    [[ "${release_artifact}" == libpid0-"${version}"* ]] ||
+      fail "stale release artifact for a different version: ${release_artifact}"
+  done < <(find "${dist_dir}" -mindepth 1 -maxdepth 1 -type f \( -name 'libpid0-*.tar.gz' -o -name 'libpid0-*.h.gz' -o -name 'libpid0-*-CHECKSUMS' \) -printf '%f\n' | LC_ALL=C sort)
+
+  [[ ! -e "${dist_dir}/SHA256SUMS" ]] ||
+    fail "deprecated checksum manifest must not be present: ${dist_dir}/SHA256SUMS"
 
   tmp_root="$(mktemp -d "${dist_dir}/.verify.XXXXXX")"
 
@@ -309,7 +320,14 @@ main() {
   done < <(find "${dist_dir}" -mindepth 1 -maxdepth 1 -type f \( -name "libpid0-${version}*.tar.gz" -o -name "libpid0-${version}.h.gz" \) -printf '%f\n' | LC_ALL=C sort)
 
   "${script_dir}/verify-lifecycle.sh"
+  "${script_dir}/test-discover-target-tools.sh"
   printf 'package-verify.sh: package verification ok\n'
 }
+
+if [[ "${1:-}" == "--verify-paths" ]]; then
+  [[ "$#" == "3" ]] || fail "usage: $0 --verify-paths <scan-root> <artifact-name>"
+  scan_forbidden_paths "$2" "$3"
+  exit 0
+fi
 
 main "$@"

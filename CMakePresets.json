@@ -1,10 +1,6 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 28,
-    "patch": 0
-  },
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
   "configurePresets": [
     {
       "name": "base",
@@ -14,42 +10,61 @@
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "PID0_BUILD_EXAMPLES": "ON",
-        "PID0_BUILD_TESTS": "ON"
+        "PID0_BUILD_TESTS": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/cpkt-linux.cmake"
       }
     },
     {
       "name": "debug",
-      "displayName": "Debug (prefer musl)",
+      "displayName": "Debug (pinned x86_64 Linux GNU)",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-prefer-musl.cmake"
+        "PID0_TARGET_ID": "x86_64-linux-gnu",
+        "PID0_TARGET_ARCH": "x86_64",
+        "PID0_TARGET_OS": "linux",
+        "PID0_TARGET_LIBC": "gnu"
       }
     },
     {
+      "name": "valgrind",
+      "displayName": "Native Valgrind (pinned x86_64 Linux GNU)",
+      "inherits": "debug"
+    },
+    {
       "name": "release",
-      "displayName": "Release (prefer musl)",
+      "displayName": "Release (pinned x86_64 Linux GNU)",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-prefer-musl.cmake"
+        "PID0_TARGET_ID": "x86_64-linux-gnu",
+        "PID0_TARGET_ARCH": "x86_64",
+        "PID0_TARGET_OS": "linux",
+        "PID0_TARGET_LIBC": "gnu"
       }
     },
     {
       "name": "asan",
-      "displayName": "Address/UB sanitizer",
+      "displayName": "Address/UB sanitizer (pinned x86_64 Linux GNU)",
+      "inherits": "debug",
+      "cacheVariables": { "PID0_ENABLE_ASAN": "ON" }
+    },
+    {
+      "name": "fuzz",
       "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "PID0_ENABLE_ASAN": "ON"
-      }
+      "cacheVariables": { "PID0_BUILD_FUZZERS": "ON", "PID0_BUILD_EXAMPLES": "OFF", "PID0_BUILD_TESTS": "OFF", "PID0_TARGET_ID": "x86_64-linux-gnu" , "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/cpkt-aflpp.cmake" }
     },
     {
       "name": "static-release",
-      "displayName": "Release (prefer musl, static executables)",
-      "inherits": "release",
+      "displayName": "Static release (pinned x86_64 Linux musl)",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_EXE_LINKER_FLAGS": "-static"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXE_LINKER_FLAGS": "-static",
+        "PID0_TARGET_ID": "x86_64-linux-musl",
+        "PID0_TARGET_ARCH": "x86_64",
+        "PID0_TARGET_OS": "linux",
+        "PID0_TARGET_LIBC": "musl"
       }
     },
     {
@@ -57,9 +72,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "cc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "x86_64",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "x86_64-linux-gnu",
@@ -73,9 +85,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "musl-gcc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "x86_64",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "x86_64-linux-musl",
@@ -89,9 +98,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "aarch64",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "aarch64-linux-gnu",
@@ -105,9 +111,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "aarch64-linux-musl-gcc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "aarch64",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "aarch64-linux-musl",
@@ -121,9 +124,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "arm-linux-gnueabihf-gcc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "armhf",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "armhf-linux-gnu",
@@ -137,9 +137,6 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "arm-linux-musleabihf-gcc",
-        "CMAKE_SYSTEM_NAME": "Linux",
-        "CMAKE_SYSTEM_PROCESSOR": "armhf",
         "PID0_BUILD_EXAMPLES": "OFF",
         "PID0_BUILD_TESTS": "OFF",
         "PID0_TARGET_ID": "armhf-linux-musl",
@@ -151,8 +148,10 @@
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "debug" },
+    { "name": "valgrind", "configurePreset": "valgrind" },
     { "name": "release", "configurePreset": "release" },
     { "name": "asan", "configurePreset": "asan" },
+    { "name": "fuzz", "configurePreset": "fuzz" },
     { "name": "static-release", "configurePreset": "static-release" },
     { "name": "x86_64-linux-gnu-release", "configurePreset": "x86_64-linux-gnu-release" },
     { "name": "x86_64-linux-musl-release", "configurePreset": "x86_64-linux-musl-release" },
@@ -161,58 +160,10 @@
     { "name": "armhf-linux-gnu-release", "configurePreset": "armhf-linux-gnu-release" },
     { "name": "armhf-linux-musl-release", "configurePreset": "armhf-linux-musl-release" }
   ],
-  "packagePresets": [
-    {
-      "name": "x86_64-linux-gnu-release",
-      "configurePreset": "x86_64-linux-gnu-release",
-      "generators": ["TGZ"]
-    },
-    {
-      "name": "x86_64-linux-musl-release",
-      "configurePreset": "x86_64-linux-musl-release",
-      "generators": ["TGZ"]
-    },
-    {
-      "name": "aarch64-linux-gnu-release",
-      "configurePreset": "aarch64-linux-gnu-release",
-      "generators": ["TGZ"]
-    },
-    {
-      "name": "aarch64-linux-musl-release",
-      "configurePreset": "aarch64-linux-musl-release",
-      "generators": ["TGZ"]
-    },
-    {
-      "name": "armhf-linux-gnu-release",
-      "configurePreset": "armhf-linux-gnu-release",
-      "generators": ["TGZ"]
-    },
-    {
-      "name": "armhf-linux-musl-release",
-      "configurePreset": "armhf-linux-musl-release",
-      "generators": ["TGZ"]
-    }
-  ],
   "testPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "asan",
-      "configurePreset": "asan",
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "static-release",
-      "configurePreset": "static-release",
-      "output": { "outputOnFailure": true }
-    }
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "valgrind", "configurePreset": "valgrind", "output": { "outputOnFailure": true } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true } }
   ]
 }

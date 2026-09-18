@@ -27,7 +27,8 @@ fi
 
 version="${source_artifact#libpid0-}"
 version="${version%.tar.gz}"
-tmp_root="$(mktemp -d "${dist_dir}/.source-smoke.XXXXXX")"
+mkdir -p "${repo_root}/build"
+tmp_root="$(mktemp -d "${repo_root}/build/source-smoke.XXXXXX")"
 tar -xzf "${dist_dir}/${source_artifact}" -C "${tmp_root}"
 source_root="${tmp_root}/libpid0-${version}"
 

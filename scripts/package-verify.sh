@@ -86,6 +86,8 @@ verify_elf_metadata() {
   local readelf_bin="$3"
   local elf_path=""
   local metadata=""
+  local program_headers=""
+  local interpreter=""
 
   [[ -x "${readelf_bin}" ]] || fail "target readelf is unavailable for ${artifact_name}: ${readelf_bin}"
 
@@ -94,6 +96,14 @@ verify_elf_metadata() {
       continue
     fi
     metadata="$("${readelf_bin}" -d "${elf_path}" 2>/dev/null || true)"
+    program_headers="$("${readelf_bin}" -l "${elf_path}" 2>/dev/null || true)"
+    interpreter="$(sed -n 's/.*Requesting program interpreter: \(.*\)\].*/\1/p' <<<"${program_headers}")"
+    if [[ -n "${interpreter}" ]]; then
+      case "${interpreter}" in
+        /lib/*|/lib64/*|/usr/lib/*|/usr/lib64/*) ;;
+        *) fail "${artifact_name} contains non-portable ELF interpreter in ${elf_path}: ${interpreter}" ;;
+      esac
+    fi
     if printf '%s\n' "${metadata}" | grep -Eq 'RPATH|RUNPATH'; then
       if printf '%s\n' "${metadata}" | grep -Ev '\$ORIGIN' | grep -Eq 'RPATH|RUNPATH'; then
         fail "${artifact_name} contains non-relocatable ELF runtime path in ${elf_path}"
@@ -105,10 +115,46 @@ verify_elf_metadata() {
   done < <(find "${extract_root}" -type f -print0)
 }
 
+verify_bootlin_runtime() {
+  local executable="$1"
+  local target_id="$2"
+  local readelf_bin="$3"
+  local expected_interpreter="$4"
+  local expected_runtime_rpath="$5"
+  local program_headers=""
+  local dynamic_section=""
+  local interpreter=""
+  local rpath=""
+
+  program_headers="$("${readelf_bin}" -l "${executable}")"
+  dynamic_section="$("${readelf_bin}" -d "${executable}")"
+  interpreter="$(sed -n 's/.*Requesting program interpreter: \(.*\)\].*/\1/p' <<<"${program_headers}")"
+  rpath="$(sed -n 's/.*(RPATH).*\[\(.*\)\].*/\1/p' <<<"${dynamic_section}")"
+  [[ "${interpreter}" == "${expected_interpreter}" ]] ||
+    fail "SDK consumer for ${target_id} does not use the selected Bootlin ELF interpreter: ${executable}"
+  [[ -n "${rpath}" && "${rpath}" == "${expected_runtime_rpath}"* ]] ||
+    fail "SDK consumer for ${target_id} does not use the selected Bootlin runtime RPATH: ${executable}"
+  if printf '%s\n' "${dynamic_section}" | grep -q '(RUNPATH)'; then
+    fail "SDK consumer for ${target_id} uses DT_RUNPATH instead of transitive DT_RPATH: ${executable}"
+  fi
+}
+
+run_native_consumer() {
+  local executable="$1"
+  local target_id="$2"
+
+  if [[ "${target_id}" == x86_64-linux-* ]]; then
+    "${executable}" || fail "native SDK consumer failed: ${executable}"
+  fi
+}
+
 verify_cmake_consumer() {
   local sdk_root="$1"
   local target_id="$2"
   local compiler="$3"
+  local readelf_bin="$4"
+  local interpreter="$5"
+  local runtime_rpath="$6"
   local consumer_dir="${tmp_root}/consumer-${target_id}"
 
   mkdir -p "${consumer_dir}"
@@ -119,10 +165,21 @@ set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 find_package(pid0 CONFIG REQUIRED)
+function(configure_bootlin_runtime target_name)
+  target_link_options(
+    ${target_name}
+    PRIVATE
+      "-Wl,--dynamic-linker,${PID0_BOOTLIN_ELF_INTERPRETER}"
+      "-Wl,--disable-new-dtags"
+      "-Wl,-rpath,${PID0_BOOTLIN_RUNTIME_RPATH}:${CMAKE_PREFIX_PATH}/lib"
+  )
+endfunction()
 add_executable(pid0_static_consumer main.c)
 target_link_libraries(pid0_static_consumer PRIVATE pid0::pid0_static)
+configure_bootlin_runtime(pid0_static_consumer)
 add_executable(pid0_shared_consumer main.c)
 target_link_libraries(pid0_shared_consumer PRIVATE pid0::pid0_shared)
+configure_bootlin_runtime(pid0_shared_consumer)
 EOF
   cat > "${consumer_dir}/main.c" <<'EOF'
 #include <pid0/pid0.h>
@@ -136,14 +193,25 @@ EOF
 
   cmake -S "${consumer_dir}" -B "${consumer_dir}/build" -G Ninja \
     -DCMAKE_PREFIX_PATH="${sdk_root}" \
-    -DCMAKE_C_COMPILER="${compiler}" >/dev/null
+    -DCMAKE_C_COMPILER="${compiler}" \
+    -DPID0_BOOTLIN_ELF_INTERPRETER="${interpreter}" \
+    -DPID0_BOOTLIN_RUNTIME_RPATH="${runtime_rpath}" >/dev/null
   cmake --build "${consumer_dir}/build" >/dev/null
+  verify_bootlin_runtime "${consumer_dir}/build/pid0_static_consumer" "${target_id}" \
+    "${readelf_bin}" "${interpreter}" "${runtime_rpath}"
+  verify_bootlin_runtime "${consumer_dir}/build/pid0_shared_consumer" "${target_id}" \
+    "${readelf_bin}" "${interpreter}" "${runtime_rpath}"
+  run_native_consumer "${consumer_dir}/build/pid0_static_consumer" "${target_id}"
+  run_native_consumer "${consumer_dir}/build/pid0_shared_consumer" "${target_id}"
 }
 
 verify_pkg_config_consumer() {
   local sdk_root="$1"
   local target_id="$2"
   local compiler="$3"
+  local readelf_bin="$4"
+  local interpreter="$5"
+  local runtime_rpath="$6"
   local consumer_dir="${tmp_root}/pkgconfig-consumer-${target_id}"
   local cflags=""
   local libs=""
@@ -168,8 +236,15 @@ EOF
   (
     cd "${consumer_dir}"
     # shellcheck disable=SC2086
-    "${compiler}" -std=c89 -Wall -Wextra -Wpedantic -Werror ${cflags} main.c ${libs} -o pid0-pkgconfig-consumer
+    "${compiler}" -std=c89 -Wall -Wextra -Wpedantic -Werror ${cflags} main.c ${libs} \
+      "-Wl,--dynamic-linker,${interpreter}" \
+      -Wl,--disable-new-dtags \
+      "-Wl,-rpath,${runtime_rpath}:${sdk_root}/lib" \
+      -o pid0-pkgconfig-consumer
   )
+  verify_bootlin_runtime "${consumer_dir}/pid0-pkgconfig-consumer" "${target_id}" \
+    "${readelf_bin}" "${interpreter}" "${runtime_rpath}"
+  run_native_consumer "${consumer_dir}/pid0-pkgconfig-consumer" "${target_id}"
 }
 
 verify_binary_archive() {
@@ -182,6 +257,8 @@ verify_binary_archive() {
   local sdk_root="${extract_dir}/${root}"
   local compiler=""
   local readelf_bin=""
+  local interpreter=""
+  local runtime_rpath=""
   local tool_description=""
 
   mkdir -p "${extract_dir}"
@@ -207,12 +284,16 @@ verify_binary_archive() {
   tool_description="$("${script_dir}/discover_target_tools.sh" --target-id "${target_id%.tar.gz}" \
     --build-dir "${repo_root}/build/${target_id%.tar.gz}-release")"
   readelf_bin="$(awk -F= '$1 == "READELF" { print $2 }' <<<"${tool_description}")"
+  interpreter="$(awk -F= '$1 == "INTERPRETER" { print $2 }' <<<"${tool_description}")"
+  runtime_rpath="$(awk -F= '$1 == "RUNTIME_RPATH" { print $2 }' <<<"${tool_description}")"
   verify_elf_metadata "${sdk_root}" "${artifact_name}" "${readelf_bin}"
 
   compiler="$(awk -F= '$1 == "CC" { print $2 }' <<<"${tool_description}")"
   if [[ -n "${compiler}" ]] && command -v "${compiler}" >/dev/null 2>&1; then
-    verify_cmake_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}"
-    verify_pkg_config_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}"
+    verify_cmake_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}" \
+      "${readelf_bin}" "${interpreter}" "${runtime_rpath}"
+    verify_pkg_config_consumer "${sdk_root}" "${target_id%.tar.gz}" "${compiler}" \
+      "${readelf_bin}" "${interpreter}" "${runtime_rpath}"
   else
     fail "compiler unavailable for install-tree smoke: ${compiler:-<empty>} (${target_id%.tar.gz})"
   fi
@@ -297,7 +378,8 @@ main() {
   [[ ! -e "${dist_dir}/SHA256SUMS" ]] ||
     fail "deprecated checksum manifest must not be present: ${dist_dir}/SHA256SUMS"
 
-  tmp_root="$(mktemp -d "${dist_dir}/.verify.XXXXXX")"
+  mkdir -p "${repo_root}/build"
+  tmp_root="$(mktemp -d "${repo_root}/build/package-verify.XXXXXX")"
 
   for artifact in "${listed_artifacts[@]}"; do
     require_file "${dist_dir}/${artifact}"

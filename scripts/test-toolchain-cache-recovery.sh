@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "${script_dir}/.." && pwd)"
 resolver="${script_dir}/cpkt-toolchains.sh"
 tmp_root=""
 
@@ -26,11 +27,12 @@ main() {
     fail "resolver does not use the lifecycle cache-lock timeout"
   grep -Fq 'with_cache_lock "$(cache_root)/locks/bootlin-$name.lock" install_bootlin_locked "$target"' "${resolver}" ||
     fail "resolver does not serialize Bootlin root publication"
-  grep -Fq 'if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then' "${resolver}" ||
+  grep -Fq 'if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" "$loader_rel"; then' "${resolver}" ||
     fail "resolver does not recheck Bootlin readiness while holding the cache lock"
-  tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/libpid0-toolchain-cache-recovery.XXXXXX")"
+  mkdir -p "${repo_root}/build"
+  tmp_root="$(mktemp -d "${repo_root}/build/toolchain-cache-recovery.XXXXXX")"
   cache_root="${tmp_root}/cache"
-  archive="${cache_root}/archives/x86-64--glibc--stable-2025.08-1.tar.xz"
+  archive="${cache_root}/archives/x86-64--glibc--stable-2026.08-1.tar.xz"
   fake_bin="${tmp_root}/bin"
   mkdir -p "$(dirname -- "${archive}")" "${fake_bin}"
   printf 'corrupt Bootlin archive\n' > "${archive}"
@@ -59,7 +61,7 @@ EOF
   [[ -s "${tmp_root}/downloads.log" ]] ||
     fail "corrupt cached archive was not replaced through the download path"
   [[ ! -e "${archive}" ]] || fail "corrupt cached archive was not removed before replacement"
-  grep -F 'checksum mismatch for x86-64--glibc--stable-2025.08-1.tar.xz' "${tmp_root}/resolver.log" >/dev/null ||
+  grep -F 'checksum mismatch for x86-64--glibc--stable-2026.08-1.tar.xz' "${tmp_root}/resolver.log" >/dev/null ||
     fail "replacement archive was not checksum-verified"
   printf 'test-toolchain-cache-recovery.sh: corrupt cache recovery contract ok\n'
 }

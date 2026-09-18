@@ -35,7 +35,7 @@ if(NOT pid0_discover_result EQUAL 0)
   )
 endif()
 
-foreach(pid0_key IN ITEMS root cc cxx ld ar ranlib strip nm objcopy objdump addr2line readelf sysroot)
+foreach(pid0_key IN ITEMS root cc cxx ld ar ranlib strip nm objcopy objdump addr2line readelf sysroot interpreter runtime_rpath)
   string(REGEX MATCH "${pid0_key}=([^\r\n]+)" pid0_match "${pid0_description}")
   if(NOT pid0_match)
     message(FATAL_ERROR
@@ -57,6 +57,12 @@ set(CMAKE_OBJDUMP "${pid0_objdump}" CACHE FILEPATH "Pinned Bootlin objdump" FORC
 set(CMAKE_ADDR2LINE "${pid0_addr2line}" CACHE FILEPATH "Pinned Bootlin addr2line" FORCE)
 set(CMAKE_READELF "${pid0_readelf}" CACHE FILEPATH "Pinned Bootlin readelf" FORCE)
 set(CMAKE_SYSROOT "${pid0_sysroot}" CACHE PATH "Pinned Bootlin sysroot" FORCE)
+set(PID0_BOOTLIN_ROOT "${pid0_root}" CACHE PATH
+  "Pinned Bootlin collection root for local development executable checks" FORCE)
+set(PID0_BOOTLIN_ELF_INTERPRETER "${pid0_interpreter}" CACHE FILEPATH
+  "Pinned Bootlin ELF interpreter for local development executables" FORCE)
+set(PID0_BOOTLIN_RUNTIME_RPATH "${pid0_runtime_rpath}" CACHE STRING
+  "Pinned Bootlin runtime search path for local development executables" FORCE)
 set(CMAKE_FIND_ROOT_PATH "${pid0_sysroot}" "${pid0_root}" CACHE STRING "Pinned Bootlin roots" FORCE)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER CACHE STRING "" FORCE)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY CACHE STRING "" FORCE)

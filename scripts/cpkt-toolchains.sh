@@ -88,32 +88,32 @@ require_target() {
 bootlin_meta() {
   case "$1" in
     x86_64-linux-gnu)
-      printf '%s\n' 'x86-64|x86-64--glibc--stable-2025.08-1|760acd5c3159448b618e237b61935335baada74fe0cdc0d7611826cb49b41c8c|x86_64-linux|x86_64-buildroot-linux-gnu/sysroot'
+      printf '%s\n' 'x86-64|x86-64--glibc--stable-2026.08-1|cde893afab04ac7dcd15c46aac214ff550441b982536124c88a71146a0eeedd3|x86_64-linux|x86_64-buildroot-linux-gnu/sysroot|lib/ld-linux-x86-64.so.2'
       ;;
     x86_64-linux-musl)
-      printf '%s\n' 'x86-64|x86-64--musl--stable-2025.08-1|09fca3aa89540f1b01b5f4210d488cbeb00f522044c53e9989b1dd8a38076912|x86_64-linux|x86_64-buildroot-linux-musl/sysroot'
+      printf '%s\n' 'x86-64|x86-64--musl--stable-2026.08-1|78d3a4683d6ac47b5ee73bd5bce210b55eb93dff1b137c61298af97eb0d2b5a6|x86_64-linux|x86_64-buildroot-linux-musl/sysroot|lib/ld-musl-x86_64.so.1'
       ;;
     aarch64-linux-gnu)
-      printf '%s\n' 'aarch64|aarch64--glibc--stable-2025.08-1|dfb47eee874eef9e8a7fc042eee4e0a183f444b6bcde6a82fef8f009918389c9|aarch64-linux|aarch64-buildroot-linux-gnu/sysroot'
+      printf '%s\n' 'aarch64|aarch64--glibc--stable-2026.08-1|0213efac9b5577f20d58de9431960a191347ffc2257b27ffe7250522bf1f7867|aarch64-linux|aarch64-buildroot-linux-gnu/sysroot|lib/ld-linux-aarch64.so.1'
       ;;
     aarch64-linux-musl)
-      printf '%s\n' 'aarch64|aarch64--musl--stable-2025.08-1|defba831ffa1175236f137069333e21ed46d4d19feb5080a90cf248b6fc2cb08|aarch64-linux|aarch64-buildroot-linux-musl/sysroot'
+      printf '%s\n' 'aarch64|aarch64--musl--stable-2026.08-1|b388c480a48e8e9f9b99e3d14e69219c4d61e5a2424a82faecb88a015b781a60|aarch64-linux|aarch64-buildroot-linux-musl/sysroot|lib/ld-musl-aarch64.so.1'
       ;;
     armhf-linux-gnu)
-      printf '%s\n' 'armv7-eabihf|armv7-eabihf--glibc--stable-2025.08-1|97d6fbaf19832002f3d6aa8fd31b2d29c1dc7b0752f4ae8ed35860fd33c1f9b4|arm-linux|arm-buildroot-linux-gnueabihf/sysroot'
+      printf '%s\n' 'armv7-eabihf|armv7-eabihf--glibc--stable-2026.08-1|9b7e25a74e87dac1e05d399444295e254a3073a056101e3197a859490e5701cd|arm-linux|arm-buildroot-linux-gnueabihf/sysroot|lib/ld-linux-armhf.so.3'
       ;;
     armhf-linux-musl)
-      printf '%s\n' 'armv7-eabihf|armv7-eabihf--musl--stable-2025.08-1|2f3a34458c3a8b961bd09f89669130fcdc4c1dbc6e31ada720527e4ad3741c11|arm-linux|arm-buildroot-linux-musleabihf/sysroot'
+      printf '%s\n' 'armv7-eabihf|armv7-eabihf--musl--stable-2026.08-1|9147bafae4aa272321a3c6440d04d83b7e23411b2d344f875541d84c4444ba9b|arm-linux|arm-buildroot-linux-musleabihf/sysroot|lib/ld-musl-armhf.so.1'
       ;;
     *) die "unsupported Bootlin target: $1" ;;
   esac
 }
 
 bootlin_values() {
-  local meta arch name sha256 prefix sysroot_rel
+  local meta arch name sha256 prefix sysroot_rel loader_rel
   meta=$(bootlin_meta "$1")
-  IFS='|' read -r arch name sha256 prefix sysroot_rel <<<"$meta"
-  printf '%s|%s|%s|%s|%s|%s\n' "$arch" "$name" "$sha256" "$prefix" "$sysroot_rel" "$(cache_root)/roots/$name"
+  IFS='|' read -r arch name sha256 prefix sysroot_rel loader_rel <<<"$meta"
+  printf '%s|%s|%s|%s|%s|%s|%s\n' "$arch" "$name" "$sha256" "$prefix" "$sysroot_rel" "$loader_rel" "$(cache_root)/roots/$name"
 }
 
 compiler_file() {
@@ -129,7 +129,7 @@ existing_compiler_file() {
 }
 
 bootlin_ready() {
-  local root=$1 prefix=$2 sysroot=$3
+  local root=$1 prefix=$2 sysroot=$3 loader_rel=$4
   [[ -x "$root/bin/$prefix-gcc" ]] &&
     [[ -x "$root/bin/$prefix-g++" ]] &&
     [[ -x "$root/bin/$prefix-ld" ]] &&
@@ -142,6 +142,7 @@ bootlin_ready() {
     [[ -x "$root/bin/$prefix-addr2line" ]] &&
     [[ -x "$root/bin/$prefix-gdb" ]] &&
     [[ -x "$root/bin/$prefix-readelf" ]] &&
+    [[ -x "$sysroot/$loader_rel" ]] &&
     { [[ -f "$sysroot/usr/include/stdio.h" ]] || [[ -f "$sysroot/include/stdio.h" ]]; } &&
     { [[ -e "$sysroot/usr/lib/libc.so" ]] || [[ -e "$sysroot/lib/libc.so" ]] || [[ -e "$sysroot/lib/libc.so.6" ]]; } &&
     existing_compiler_file "$root/bin/$prefix-g++" libstdc++.a >/dev/null &&
@@ -163,20 +164,20 @@ osxcross_candidate() {
 }
 
 install_bootlin() {
-  local target=$1 values arch name sha256 prefix sysroot_rel root
+  local target=$1 values arch name sha256 prefix sysroot_rel loader_rel root
   values=$(bootlin_values "$target")
-  IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
-  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
+  IFS='|' read -r arch name sha256 prefix sysroot_rel loader_rel root <<<"$values"
+  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" "$loader_rel"; then
     return
   fi
   with_cache_lock "$(cache_root)/locks/bootlin-$name.lock" install_bootlin_locked "$target"
 }
 
 install_bootlin_locked() {
-  local target=$1 values arch name sha256 prefix sysroot_rel root archive_dir archive tmp extract actual
+  local target=$1 values arch name sha256 prefix sysroot_rel loader_rel root archive_dir archive tmp extract actual
   values=$(bootlin_values "$target")
-  IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
-  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
+  IFS='|' read -r arch name sha256 prefix sysroot_rel loader_rel root <<<"$values"
+  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" "$loader_rel"; then
     return
   fi
 
@@ -209,21 +210,35 @@ install_bootlin_locked() {
   mv "$extract/$name" "$root"
   rm -rf "$extract"
   trap - EXIT HUP INT TERM
-  bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" || die "incomplete extracted Bootlin toolchain: $root"
+  bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" "$loader_rel" || die "incomplete extracted Bootlin toolchain: $root"
 }
 
 print_bootlin_target() {
-  local target=$1 values arch name sha256 prefix sysroot_rel root cc cxx
+  local target=$1 values arch name sha256 prefix sysroot_rel loader_rel root cc cxx sysroot interpreter runtime_rpath runtime_library runtime_file runtime_dir
   values=$(bootlin_values "$target")
-  IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
+  IFS='|' read -r arch name sha256 prefix sysroot_rel loader_rel root <<<"$values"
   printf 'target=%s\ncache=%s\nsource=bootlin\narchive=%s.tar.xz\n' "$target" "$(cache_root)" "$name"
-  if ! bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
+  sysroot="$root/$sysroot_rel"
+  if ! bootlin_ready "$root" "$prefix" "$sysroot" "$loader_rel"; then
     printf 'status=missing\ndownloadable=yes\nurl=https://toolchains.bootlin.com/downloads/releases/toolchains/%s/tarballs/%s.tar.xz\n' "$arch" "$name"
     return
   fi
   cc="$root/bin/$prefix-gcc"
   cxx="$root/bin/$prefix-g++"
-  printf 'status=ready\nroot=%s\nprefix=%s\nsysroot=%s\nlibc=%s\n' "$root" "$prefix" "$root/$sysroot_rel" "${target##*-}"
+  interpreter="$sysroot/$loader_rel"
+  runtime_rpath="$sysroot/lib:$sysroot/usr/lib"
+  # Dynamic compiler and sanitizer runtimes live outside the sysroot in some
+  # collections. Discover their canonical directories from the selected GCC.
+  for runtime_library in libgcc_s.so.1 libstdc++.so.6 libasan.so libubsan.so; do
+    runtime_file="$(existing_compiler_file "$cc" "$runtime_library" || true)"
+    [[ -n "$runtime_file" ]] || continue
+    runtime_dir="$(dirname -- "$runtime_file")"
+    case ":$runtime_rpath:" in
+      *":$runtime_dir:"*) ;;
+      *) runtime_rpath+=":$runtime_dir" ;;
+    esac
+  done
+  printf 'status=ready\nroot=%s\nprefix=%s\nsysroot=%s\nlibc=%s\ninterpreter=%s\nruntime_rpath=%s\n' "$root" "$prefix" "$sysroot" "${target##*-}" "$interpreter" "$runtime_rpath"
   printf 'cc=%s\ncxx=%s\nld=%s\nar=%s\nranlib=%s\nstrip=%s\nnm=%s\nobjcopy=%s\nobjdump=%s\naddr2line=%s\ngdb=%s\nreadelf=%s\n' \
     "$cc" "$cxx" "$root/bin/$prefix-ld" "$root/bin/$prefix-ar" "$root/bin/$prefix-ranlib" "$root/bin/$prefix-strip" "$root/bin/$prefix-nm" "$root/bin/$prefix-objcopy" "$root/bin/$prefix-objdump" "$root/bin/$prefix-addr2line" "$root/bin/$prefix-gdb" "$root/bin/$prefix-readelf"
   printf 'target_triple=%s\nlibstdcxx_a=%s\nlibgcc_a=%s\n' "${sysroot_rel%/sysroot}" "$(existing_compiler_file "$cxx" libstdc++.a)" "$(existing_compiler_file "$cxx" libgcc.a)"
@@ -264,7 +279,7 @@ print_env() {
   local target=$1 description key value
   description=$(report_target "$target")
   [[ "$description" == *$'status=ready'* ]] || die "target is missing; run: $0 ensure $target"
-  for key in source root prefix sysroot cc cxx ld ar ranlib strip nm objcopy objdump addr2line gdb readelf libstdcxx_a libgcc_a otool; do
+  for key in source root prefix sysroot interpreter runtime_rpath cc cxx ld ar ranlib strip nm objcopy objdump addr2line gdb readelf libstdcxx_a libgcc_a otool; do
     value=$(printf '%s\n' "$description" | sed -n "s/^${key}=//p")
     [[ -z "$value" ]] || printf 'export %s=%q\n' "CPKT_TOOLCHAIN_${key^^}" "$value"
   done

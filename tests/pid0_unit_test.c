@@ -85,6 +85,7 @@ static void test_is_terminate_signal(void **state) {
 static void test_wait_for_managed_child_reaps_other_children(void **state) {
   int exit_code = -1;
   int status = 0;
+  siginfo_t extra_info;
   pid_t extra_pid;
   pid_t managed_pid;
   (void)state;
@@ -95,11 +96,14 @@ static void test_wait_for_managed_child_reaps_other_children(void **state) {
     _exit(0);
   }
 
+  assert_int_equal(
+      waitid(P_PID, (id_t)extra_pid, &extra_info, WEXITED | WNOWAIT), 0);
+  assert_int_equal(extra_info.si_pid, extra_pid);
+  assert_int_equal(extra_info.si_code, CLD_EXITED);
+
   managed_pid = fork();
   assert_true(managed_pid >= 0);
   if (managed_pid == 0) {
-    struct timespec delay = {0, 100 * 1000 * 1000};
-    nanosleep(&delay, NULL);
     _exit(7);
   }
 
@@ -114,7 +118,7 @@ static void test_wait_for_managed_child_reaps_other_children(void **state) {
 static void test_drain_zombies_nonblock(void **state) {
   int status = 0;
   pid_t pid;
-  struct timespec delay = {0, 50 * 1000 * 1000};
+  siginfo_t info;
   (void)state;
 
   pid = fork();
@@ -123,7 +127,10 @@ static void test_drain_zombies_nonblock(void **state) {
     _exit(0);
   }
 
-  nanosleep(&delay, NULL);
+  assert_int_equal(waitid(P_PID, (id_t)pid, &info, WEXITED | WNOWAIT), 0);
+  assert_int_equal(info.si_pid, pid);
+  assert_int_equal(info.si_code, CLD_EXITED);
+  assert_int_equal(info.si_status, 0);
   pid0_drain_zombies_nonblock();
 
   errno = 0;

@@ -28,7 +28,19 @@ reject_pattern() {
   fi
 }
 
+reject_timing_synchronization() {
+  local path=""
+  local timing_call_pattern='(^|[^[:alnum:]_])(nano|u)?s'
+
+  timing_call_pattern+='leep([^[:alnum:]_]|$)'
+  while IFS= read -r path; do
+    reject_pattern "${timing_call_pattern}" "${repo_root}/${path}"
+  done < <(git -C "${repo_root}" ls-files -- '*.c' '*.h' '*.sh' '*.py' '*.cmake' \
+    'CMakeLists.txt' 'Makefile')
+}
+
 cmake -S "${repo_root}" --list-presets >/dev/null
+reject_timing_synchronization
 
 for preset in \
   debug \
@@ -64,6 +76,16 @@ require_pattern 'cpkt-toolchains\.sh' "${toolchain_path}"
 require_pattern 'CPKT_DEPENDENCY_CACHE' "${dependency_path}"
 require_pattern 'print-file-name=libc.so' "${toolchain_path}"
 require_pattern 'Pinned compiler selected a libc outside its sysroot' "${toolchain_path}"
+require_pattern 'PID0_BOOTLIN_ELF_INTERPRETER' "${toolchain_path}"
+require_pattern 'PID0_BOOTLIN_ROOT' "${toolchain_path}"
+require_pattern 'pid0_configure_bootlin_runtime' "${repo_root}/CMakeLists.txt"
+require_pattern 'pid0-bootlin-runtime' "${repo_root}/tests/CMakeLists.txt"
+require_pattern 'PID0_EXPECT_STATIC' "${repo_root}/tests/CMakeLists.txt"
+require_pattern 'PID0_VERIFY_RUNTIME_RESOLUTION' "${repo_root}/tests/pid0_bootlin_runtime_test.cmake"
+require_pattern 'INTERPRETER=' "${repo_root}/scripts/discover_target_tools.sh"
+require_pattern 'verify_bootlin_runtime' "${repo_root}/scripts/package-verify.sh"
+require_pattern 'run_native_consumer' "${repo_root}/scripts/package-verify.sh"
+require_pattern 'CompilationDatabase:[[:space:]]*build/debug' "${repo_root}/.clangd"
 require_pattern 'PYTHONDONTWRITEBYTECODE=1' "${repo_root}/scripts/test-dependency-cache.sh"
 require_pattern 'scripts/__pycache__' "${repo_root}/scripts/clean.sh"
 require_pattern 'file\(LOCK' "${dependency_path}"
@@ -82,10 +104,16 @@ require_pattern 'pid0::pid0_shared' "${repo_root}/scripts/package-verify.sh"
 require_pattern 'libpid0-.*PID0_VERSION.*tar' "${repo_root}/cmake/package_checksums.cmake"
 require_pattern 'discover_target_tools\.sh" --target-id' "${repo_root}/scripts/package-verify.sh"
 require_pattern 'assert_elf_rpath_rejected' "${repo_root}/scripts/test-package-privacy.sh"
+require_pattern 'assert_elf_interpreter_rejected' "${repo_root}/scripts/test-package-privacy.sh"
 require_pattern '^\.NOTPARALLEL:' "${repo_root}/Makefile"
 require_pattern '^release-pipeline:' "${repo_root}/Makefile"
 require_pattern '^prerelease: release-pipeline$' "${repo_root}/Makefile"
-require_pattern '^release: clean release-pipeline$' "${repo_root}/Makefile"
+require_pattern '^lifecycle-version-contract:$' "${repo_root}/Makefile"
+require_pattern '^release: lifecycle-version-contract clean release-pipeline$' "${repo_root}/Makefile"
+require_pattern 'rev-parse --show-toplevel' "${repo_root}/scripts/release_version.sh"
+require_pattern 'cat-file -t "refs/tags/\${candidate}"' "${repo_root}/scripts/release_version.sh"
+require_pattern 'source archive VERSION must match X\.Y\.Z' "${repo_root}/scripts/release_version.sh"
+require_pattern 'assert_invalid_source_archive_version_rejected' "${repo_root}/scripts/test-release-version-contract.sh"
 require_pattern '^test-host: build-host$' "${repo_root}/Makefile"
 require_pattern '^test-configure-lock:$' "${repo_root}/Makefile"
 require_pattern '^test-cmocka-configure:$' "${repo_root}/Makefile"
@@ -93,10 +121,14 @@ require_pattern '^test-dependency-cache:$' "${repo_root}/Makefile"
 require_pattern '^test-optional-dependency-cache:$' "${repo_root}/Makefile"
 require_pattern '^test-toolchain-cache-recovery:$' "${repo_root}/Makefile"
 require_pattern '^test-toolchain-bootstrap:$' "${repo_root}/Makefile"
+require_pattern '\$resolver" ensure "\$target"' "${repo_root}/scripts/test-toolchain-bootstrap.sh"
 require_pattern '^test-aflpp-resolver:$' "${repo_root}/Makefile"
 require_pattern '^test-package-checksums:$' "${repo_root}/Makefile"
 require_pattern '^test-package-privacy:$' "${repo_root}/Makefile"
 require_pattern '^fuzz-smoke: fuzz$' "${repo_root}/Makefile"
+require_pattern '^clangd:$' "${repo_root}/Makefile"
+require_pattern '^finalize-slice: format clangd test$' "${repo_root}/Makefile"
+reject_pattern '^release-pipeline:.*clangd' "${repo_root}/Makefile"
 require_pattern 'cpkt-aflpp\.cmake' "${presets_path}"
 require_pattern 'CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600' "${repo_root}/scripts/cpkt-toolchains.sh"
 require_pattern 'collection_id' "${repo_root}/scripts/cpkt-aflpp.sh"
@@ -139,6 +171,10 @@ require_pattern 'CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600' "${repo_root}/scripts/cpkt-af
 }
 [[ -x "${repo_root}/scripts/test-package-privacy.sh" ]] || {
   printf 'verify-lifecycle.sh: missing executable package-privacy contract test\n' >&2
+  exit 1
+}
+[[ -x "${repo_root}/scripts/test-release-version-contract.sh" ]] || {
+  printf 'verify-lifecycle.sh: missing executable release-version contract test\n' >&2
   exit 1
 }
 

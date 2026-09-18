@@ -76,8 +76,20 @@ static int mode_assert_not_pid1(int argc, char **argv) {
 }
 
 static int mode_signal_wait(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
+  char ready = 'R';
+  int ready_fd = -1;
+
+  if (argc < 3 || parse_int(argv[2], &ready_fd) != 0 || ready_fd < 0) {
+    fprintf(stderr, "signal-wait requires a ready file descriptor\n");
+    return 2;
+  }
+
+  while (write(ready_fd, &ready, 1) != 1) {
+    if (errno != EINTR) {
+      perror("signal-wait: write");
+      return 2;
+    }
+  }
 
   for (;;) {
     pause();
@@ -124,8 +136,9 @@ static int mode_tty_foreground(void) {
     if (setpgid(0, 0) != 0) {
       _exit(3);
     }
-    sleep(2);
-    _exit(0);
+    for (;;) {
+      pause();
+    }
   }
 
   if (setpgid(child_pid, child_pid) != 0 && errno != EACCES && errno != ESRCH) {

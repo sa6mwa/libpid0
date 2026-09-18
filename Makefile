@@ -5,12 +5,13 @@ MAKEFLAGS += --no-builtin-rules
 
 DEV_PRESET := debug
 
-.PHONY: help print-release-version configure deps-debug deps-release deps-cross build build-debug build-release build-host test test-debug test-host test-all test-configure-lock test-cmocka-configure test-dependency-cache test-optional-dependency-cache test-toolchain-cache-recovery test-toolchain-bootstrap test-aflpp-resolver test-package-checksums test-package-privacy valgrind asan fuzz fuzz-smoke format package package-single-header package-source package-source-smoke package-checksums package-verify verify-release-archives verify-release-privacy test-install-tree release-matrix finalize-slice release-pipeline prerelease prerelease-hardening container-example container-smoke-test release clean clean-dist
+.PHONY: help print-release-version lifecycle-version-contract configure deps-debug deps-release deps-cross build build-debug build-release build-host test test-debug test-host test-all test-configure-lock test-cmocka-configure test-dependency-cache test-optional-dependency-cache test-toolchain-cache-recovery test-toolchain-bootstrap test-aflpp-resolver test-package-checksums test-package-privacy valgrind asan fuzz fuzz-smoke format clangd package package-single-header package-source package-source-smoke package-checksums package-verify verify-release-archives verify-release-privacy test-install-tree release-matrix finalize-slice release-pipeline prerelease prerelease-hardening container-example container-smoke-test release clean clean-dist
 
 help:
 	@printf '%s\n' \
 		'make configure      Configure the development preset.' \
 		'make print-release-version Print the version packaging will use.' \
+		'make lifecycle-version-contract Verify release-version resolution and source-archive validation.' \
 		'make deps-debug     Provision the pinned debug toolchain and test dependencies.' \
 		'make deps-release   Provision the pinned native release toolchain.' \
 		'make deps-cross     Provision the pinned cross-release toolchains.' \
@@ -27,7 +28,7 @@ help:
 		'make test-dependency-cache Verify shared dependency-cache behavior.' \
 		'make test-optional-dependency-cache Verify dependency-free configuration needs no dependency cache.' \
 		'make test-toolchain-cache-recovery Verify corrupt shared toolchain archives retry through download.' \
-		'make test-toolchain-bootstrap Verify the selected compiler uses only its Bootlin linker and sysroot libc.' \
+		'make test-toolchain-bootstrap Provision and verify each Bootlin collection, linker, libc, and runtime paths.' \
 		'make test-aflpp-resolver Verify AFL++ cache identity and publication locking.' \
 		'make test-package-checksums Verify standalone checksum generation lists every release artifact.' \
 		'make test-package-privacy Verify cache paths are rejected from release artifacts.' \
@@ -35,6 +36,7 @@ help:
 		'make asan           Build and run the ASan/UBSan preset.' \
 		'make fuzz-smoke     Run a bounded native AFL++ timeout-parser fuzzing job.' \
 		'make format         Run clang-format on repo C/header sources.' \
+		'make clangd         Validate native editor diagnostics from build/debug only.' \
 		'make package        Generate release artifacts.' \
 		'make package-single-header Generate the single-header release artifact.' \
 		'make package-source Generate release artifacts including the source archive.' \
@@ -45,17 +47,20 @@ help:
 		'make verify-release-archives Alias for package-verify.' \
 		'make verify-release-privacy Alias for package-verify.' \
 		'make release-matrix Generate the Linux release target matrix.' \
-		'make finalize-slice Format and run the narrow local gate.' \
+		'make finalize-slice Format, validate native clangd diagnostics, and run the narrow local gate.' \
 		'make prerelease     Run the release proof graph without cleaning generated state.' \
 		'make prerelease-hardening Alias for prerelease; no extra hardening surfaces exist.' \
 		'make container-example Run the scratch-container example (ARGS="Alice").' \
 		'make container-smoke-test Build and smoke-test the scratch-container example.' \
-		'make release        Generate single-header and package release artifacts.' \
+		'make release        Verify the tag contract, clean, and generate release artifacts.' \
 		'make clean          Remove build/ and dist/ generated artifacts.' \
 		'make clean-dist     Remove dist/ release artifacts.'
 
 print-release-version:
 	./scripts/release_version.sh
+
+lifecycle-version-contract:
+	./scripts/test-release-version-contract.sh
 
 deps-debug:
 	./scripts/cpkt-toolchains.sh ensure x86_64-linux-gnu
@@ -138,6 +143,11 @@ format:
 	cmake --preset $(DEV_PRESET)
 	cmake --build --preset $(DEV_PRESET) --target format
 
+clangd:
+	cmake --preset $(DEV_PRESET)
+	cmake --build --preset $(DEV_PRESET)
+	./scripts/clangd-check.sh
+
 package:
 	./scripts/package.sh
 
@@ -165,7 +175,7 @@ verify-release-privacy: package-verify
 
 release-matrix: package
 
-finalize-slice: format test
+finalize-slice: format clangd test
 
 release-pipeline: format test-all package-source-smoke
 
@@ -179,7 +189,7 @@ container-example:
 container-smoke-test:
 	./scripts/container-smoke-test.sh
 
-release: clean release-pipeline
+release: lifecycle-version-contract clean release-pipeline
 
 clean:
 	./scripts/clean.sh

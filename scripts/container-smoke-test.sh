@@ -23,13 +23,13 @@ trap cleanup EXIT
 PID0_CONTAINER_RUNTIME="${runtime}" PID0_CONTAINER_IMAGE="${image}" \
   "${script_dir}/container-build.sh" >/dev/null
 
-default_output="$("${runtime}" run --rm -e PID0_EXAMPLE_SLEEP_SECONDS=0 "${image}")"
+default_output="$("${runtime}" run --rm "${image}")"
 if [[ "${default_output}" != *"Hello World!"* ]]; then
   printf 'pid0: expected default container output to contain "Hello World!", got:\n%s\n' "${default_output}" >&2
   exit 1
 fi
 
-interactive_output="$(printf 'Alice\n' | "${runtime}" run --rm -i -e PID0_EXAMPLE_SLEEP_SECONDS=0 "${image}" -i)"
+interactive_output="$(printf 'Alice\n' | "${runtime}" run --rm -i "${image}" -i)"
 if [[ "${interactive_output}" != *"Hello Alice!"* ]]; then
   printf 'pid0: expected interactive container output to contain "Hello Alice!", got:\n%s\n' "${interactive_output}" >&2
   exit 1

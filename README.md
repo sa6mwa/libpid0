@@ -76,11 +76,20 @@ Useful presets:
 - `armhf-linux-gnu-release`
 - `armhf-linux-musl-release`
 
-Every Linux preset uses its matching checksum-pinned Bootlin GCC collection.
+Every Linux preset uses its matching checksum-pinned Bootlin GCC collection
+(currently Bootlin stable-2026.08-1).
 The lifecycle resolver caches complete compiler, linker, binutils, libc, and
 headers under `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`;
 it never falls back to a host or distro compiler. `debug`, `release`, and
 `valgrind` use the native `x86_64-linux-gnu` collection.
+
+Every non-shipped Linux executable built for local development—including
+examples, tests, fuzzers, and instrumentation builds—uses that collection's
+ELF interpreter and private runtime search path, including its dynamic compiler
+and sanitizer runtimes. They run directly; no runtime
+wrapper or environment-wide library-path override is needed. Release SDK
+artifacts intentionally keep normal relocatable loader metadata and are
+verified to reject collection-cache paths.
 
 `static-release` is the preset used for the scratch-container example.
 
@@ -89,7 +98,21 @@ it never falls back to a host or distro compiler. `debug`, `release`, and
 Format all tracked C/header sources with:
 
 ```sh
-cmake --build --preset debug --target format
+make format
+```
+
+Validate editor diagnostics with the native debug compilation database:
+
+```sh
+make clangd
+```
+
+`clangd` is a host editor tool. It reads only `build/debug`; cross-target,
+package, and release flows do not invoke it or use it to model a target ABI.
+For an ordinary implementation slice, use the default pre-commit gate:
+
+```sh
+make finalize-slice
 ```
 
 Inspect `dist/` as a tree while traversing `.tar.gz` artifacts virtually,
@@ -101,13 +124,11 @@ without extracting them:
 
 ## Example
 
-The example app lives in `example/` and prints `Hello <name>!`, waits 10
-seconds, and exits.
+The example app lives in `example/` and prints `Hello <name>!` and exits.
 
 - default name: `World`
 - positional argument: use it as the name
 - `-i`: prompt on standard input for the name
-- `PID0_EXAMPLE_SLEEP_SECONDS`: override the 10-second delay for smoke tests
 
 Run it from the build tree:
 
@@ -121,7 +142,7 @@ A single-header example is also built when examples are enabled:
 
 ```sh
 cmake --build --preset debug --target pid0-single-header-example
-PID0_EXAMPLE_SLEEP_SECONDS=0 build/debug/example/pid0-single-header-example Alice
+build/debug/example/pid0-single-header-example Alice
 ```
 
 `example/Containerfile` builds a static `musl` binary and copies it into a
@@ -153,7 +174,10 @@ Packaging writes tarballs to `dist/` with explicit ABI suffixes.
 Versioning rules:
 
 - default version: `0.0.0`
-- if `HEAD` is exactly tagged as `vX.Y.Z`, packages use `X.Y.Z`
+- packages use `X.Y.Z` only when `HEAD` has exactly one lightweight `vX.Y.Z`
+  tag; annotated and signed tags do not activate a release version
+- source archives carry their release version in `VERSION`; a malformed
+  `VERSION` fails configuration rather than falling back to `0.0.0`
 
 Artifacts:
 
@@ -176,8 +200,9 @@ make release
 `make release` is the local clean release gate. It removes generated state,
 builds the release artifacts, writes `dist/libpid0-<version>-CHECKSUMS`,
 verifies the checksum-listed artifacts, and smoke-tests the source archive.
-`make prerelease` runs that same proof graph without the initial clean; use it
-for iterative release-equivalent feedback.
+Before cleaning, it verifies the lightweight-tag version contract. `make
+prerelease` runs the same build/test proof graph without the initial clean or
+tag-contract mutation; use it for iterative release-equivalent feedback.
 
 `./scripts/package.sh` builds and verifies the full release matrix by default
 from the pinned Bootlin collections:
@@ -209,6 +234,10 @@ Each platform package contains headers, `libpid0.a`, shared libraries, CMake
 package metadata, pkg-config metadata, documentation, and the license under
 `share/doc/libpid0/`. `lib/libpid0.so` is a symlink to `libpid0.so.0`, and
 `lib/libpid0.so.0` is a symlink to the versioned shared library.
+Package verification extracts every SDK, applies the selected Bootlin runtime
+metadata to its temporary CMake and pkg-config consumers, and executes those
+consumers directly for native x86_64 targets. These verification-only settings
+never enter the shipped SDK.
 
 Useful lifecycle gates:
 

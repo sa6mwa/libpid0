@@ -61,6 +61,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXE_LINKER_FLAGS": "-static",
+        "BUILD_SHARED_LIBS": "OFF",
         "PID0_TARGET_ID": "x86_64-linux-musl",
         "PID0_TARGET_ARCH": "x86_64",
         "PID0_TARGET_OS": "linux",

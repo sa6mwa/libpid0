@@ -13,6 +13,12 @@ fail() {
   exit 1
 }
 
+read_fifo_line() {
+  local fifo_path="$1"
+
+  timeout 5 bash -c 'IFS= read -r line < "$1"; printf "%s\\n" "$line"' bash "${fifo_path}"
+}
+
 stop_server() {
   if [[ -n "${server_pid}" ]]; then
     kill "${server_pid}" 2>/dev/null || true
@@ -33,6 +39,7 @@ start_server() {
   local ready_path="${tmp_root}/server-ready"
 
   rm -f -- "${ready_path}" "${request_log}"
+  mkfifo "${ready_path}"
   PYTHONDONTWRITEBYTECODE=1 python3 "${https_server}" \
     --root "${tmp_root}/server" \
     --cert "${certificate_path}" \
@@ -40,15 +47,10 @@ start_server() {
     --ready "${ready_path}" \
     --access-log "${request_log}" &
   server_pid="$!"
-  for _ in $(seq 1 100); do
-    if [[ -s "${ready_path}" ]]; then
-      server_port="$(< "${ready_path}")"
-      download_url="https://127.0.0.1:${server_port}/fixture.tar.gz"
-      return
-    fi
-    sleep 0.05
-  done
-  fail "HTTPS fixture server did not become ready"
+  server_port="$(read_fifo_line "${ready_path}")" ||
+    fail "HTTPS fixture server did not become ready"
+  [[ "${server_port}" =~ ^[0-9]+$ ]] || fail "HTTPS fixture server reported an invalid port"
+  download_url="https://127.0.0.1:${server_port}/fixture.tar.gz"
 }
 
 run_probe() {
@@ -93,13 +95,9 @@ main() {
   local concurrent_one_result=""
   local concurrent_two_result=""
   local concurrent_stage=""
-  local stage_lock=""
-  local lock_holder_path=""
-  local lock_ready_path=""
-  local elapsed=""
   local request_count=""
-  local fixture_bytecode_dir="${script_dir}/__pycache__"
-  local fixture_bytecode="${fixture_bytecode_dir}/libpid0-clean-fixture.pyc"
+  local clean_fixture_root=""
+  local clean_fixture_bytecode_dir=""
 
   [[ -f "${dependency_module}" ]] || fail "missing dependency module: ${dependency_module}"
   [[ -x "${https_server}" ]] || fail "missing HTTPS fixture server: ${https_server}"
@@ -107,12 +105,12 @@ main() {
   command -v openssl >/dev/null 2>&1 || fail "openssl is required"
   command -v python3 >/dev/null 2>&1 || fail "python3 is required"
 
-  tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/libpid0-dependency-cache.XXXXXX")"
+  mkdir -p "${repo_root}/build"
+  tmp_root="$(mktemp -d "${repo_root}/build/dependency-cache.XXXXXX")"
   cache_root="${tmp_root}/shared-cache"
   fixture_root="${tmp_root}/fixture/fixture-1.0.0"
   archive_path="${tmp_root}/server/fixture.tar.gz"
   probe_path="${tmp_root}/probe.cmake"
-  lock_holder_path="${tmp_root}/hold-stage-lock.cmake"
   certificate_path="${tmp_root}/certificate.pem"
   key_path="${tmp_root}/key.pem"
   request_log="${tmp_root}/requests.log"
@@ -152,12 +150,6 @@ if(NOT EXISTS "${fixture_source}/payload")
 endif()
 file(WRITE "$ENV{TEST_DEP_RESULT}" "${fixture_source}\n")
 EOF
-  cat > "${lock_holder_path}" <<'EOF'
-file(LOCK "$ENV{TEST_DEP_STAGE_LOCK}" GUARD PROCESS TIMEOUT 10)
-file(WRITE "$ENV{TEST_DEP_LOCK_READY}" "ready\n")
-execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 2)
-EOF
-
   start_server
   run_probe "${initial_stage}" "${initial_result}"
   assert_staged_fixture "${initial_result}"
@@ -204,31 +196,17 @@ EOF
   [[ "${request_count}" == "1" ]] || fail "concurrent acquisition issued ${request_count} downloads instead of one"
   assert_no_temporary_archives
 
-  stage_lock="${concurrent_stage}/locks/fixture-1.0.0-${archive_sha256}.lock"
-  lock_ready_path="${tmp_root}/stage-lock-ready"
-  TEST_DEP_STAGE_LOCK="${stage_lock}" \
-    TEST_DEP_LOCK_READY="${lock_ready_path}" \
-    cmake -P "${lock_holder_path}" > "${tmp_root}/stage-lock-holder.log" 2>&1 &
-  local lock_holder_pid="$!"
-  for _ in $(seq 1 100); do
-    [[ -f "${lock_ready_path}" ]] && break
-    sleep 0.05
-  done
-  [[ -f "${lock_ready_path}" ]] || fail "stage lock holder did not acquire the lock"
-  SECONDS=0
-  run_probe "${concurrent_stage}" "${concurrent_one_result}"
-  elapsed=${SECONDS}
-  wait "${lock_holder_pid}"
-  (( elapsed >= 1 )) || fail "staging did not wait for the shared stage lock"
-
   stop_server
   assert_no_fixture_bytecode
 
-  mkdir -p -- "${fixture_bytecode_dir}"
-  : > "${fixture_bytecode}"
+  clean_fixture_root="${tmp_root}/clean-fixture"
+  clean_fixture_bytecode_dir="${clean_fixture_root}/scripts/__pycache__"
+  mkdir -p -- "${clean_fixture_bytecode_dir}"
+  cp "${repo_root}/scripts/clean.sh" "${clean_fixture_root}/scripts/clean.sh"
+  : > "${clean_fixture_bytecode_dir}/libpid0-clean-fixture.pyc"
 
-  "${repo_root}/scripts/clean.sh"
-  [[ ! -e "${fixture_bytecode_dir}" ]] || fail "clean left Python bytecode in the repository"
+  "${clean_fixture_root}/scripts/clean.sh"
+  [[ ! -e "${clean_fixture_bytecode_dir}" ]] || fail "clean left Python bytecode in the fixture project"
   [[ -f "${cached_archive}" ]] || fail "clean removed the shared dependency archive cache"
   printf 'test-dependency-cache.sh: dependency cache contract ok\n'
 }

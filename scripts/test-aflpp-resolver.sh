@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd -- "${script_dir}/.." && pwd)
 resolver="$script_dir/cpkt-aflpp.sh"
 
 fail() {
@@ -28,7 +29,8 @@ grep -Fq 'ready "$r" "$id" && return' "$resolver" ||
 grep -Fq '"-DAFL_PATH=\"$helper\""' "$resolver" ||
   fail 'AFL++ cache paths are not preserved as one compiler argument'
 
-fake_bin=$(mktemp -d /tmp/libpid0-aflpp-resolver.XXXXXX)
+mkdir -p "${repo_root}/build"
+fake_bin=$(mktemp -d "${repo_root}/build/aflpp-resolver.XXXXXX")
 trap 'rm -rf -- "$fake_bin"' EXIT
 printf '#!/usr/bin/env bash\nprintf "aarch64\\n"\n' > "$fake_bin/uname"
 chmod +x "$fake_bin/uname"

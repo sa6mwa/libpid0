@@ -14,30 +14,22 @@ if(PID0_VERSION_OVERRIDE)
   set(PID0_PACKAGE_VERSION "${PID0_VERSION_OVERRIDE}")
 endif()
 
-find_package(Git QUIET)
-if(NOT PID0_VERSION_OVERRIDE AND Git_FOUND)
+if(NOT PID0_VERSION_OVERRIDE)
   execute_process(
-    COMMAND "${GIT_EXECUTABLE}" describe --tags --exact-match --match "v*" HEAD
+    COMMAND "${CMAKE_CURRENT_LIST_DIR}/scripts/release_version.sh"
     WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-    RESULT_VARIABLE PID0_GIT_TAG_RESULT
-    OUTPUT_VARIABLE PID0_GIT_TAG
-    ERROR_QUIET
+    RESULT_VARIABLE PID0_VERSION_RESULT
+    OUTPUT_VARIABLE PID0_RESOLVED_VERSION
+    ERROR_VARIABLE PID0_VERSION_ERROR
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
-  if(PID0_GIT_TAG_RESULT EQUAL 0 AND PID0_GIT_TAG MATCHES "^v[0-9]+\\.[0-9]+\\.[0-9]+$")
-    string(SUBSTRING "${PID0_GIT_TAG}" 1 -1 PID0_PACKAGE_VERSION)
+  if(NOT PID0_VERSION_RESULT EQUAL 0)
+    message(FATAL_ERROR "Unable to resolve release version: ${PID0_VERSION_ERROR}")
   endif()
-endif()
-if(NOT PID0_VERSION_OVERRIDE AND PID0_PACKAGE_VERSION STREQUAL PID0_DEFAULT_VERSION)
-  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/.git" AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/VERSION")
-    file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" PID0_SOURCE_VERSION)
-    string(STRIP "${PID0_SOURCE_VERSION}" PID0_SOURCE_VERSION)
-    if(PID0_SOURCE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
-      set(PID0_PACKAGE_VERSION "${PID0_SOURCE_VERSION}")
-    else()
-      message(FATAL_ERROR "source archive VERSION must match X.Y.Z")
-    endif()
+  if(NOT PID0_RESOLVED_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "Resolved release version must match X.Y.Z: ${PID0_RESOLVED_VERSION}")
   endif()
+  set(PID0_PACKAGE_VERSION "${PID0_RESOLVED_VERSION}")
 endif()
 
 file(LOCK "${CMAKE_BINARY_DIR}/.pid0-configure.lock" GUARD PROCESS TIMEOUT 120
@@ -175,6 +167,30 @@ function(pid0_configure_library target_name)
   endif()
 endfunction()
 
+function(pid0_configure_bootlin_runtime target_name)
+  if(NOT PID0_TARGET_ID MATCHES "^(x86_64|aarch64|armhf)-linux-(gnu|musl)$")
+    return()
+  endif()
+  if(CMAKE_EXE_LINKER_FLAGS MATCHES "(^|[ \t])-static([ \t]|$)")
+    return()
+  endif()
+  if(NOT EXISTS "${PID0_BOOTLIN_ELF_INTERPRETER}")
+    message(FATAL_ERROR
+      "Pinned Bootlin ELF interpreter is unavailable: ${PID0_BOOTLIN_ELF_INTERPRETER}")
+  endif()
+  if(PID0_BOOTLIN_RUNTIME_RPATH STREQUAL "")
+    message(FATAL_ERROR "Pinned Bootlin runtime search path is unavailable")
+  endif()
+
+  target_link_options(
+    ${target_name}
+    PRIVATE
+      "-Wl,--dynamic-linker,${PID0_BOOTLIN_ELF_INTERPRETER}"
+      "-Wl,--disable-new-dtags"
+      "-Wl,-rpath,${PID0_BOOTLIN_RUNTIME_RPATH}"
+  )
+endfunction()
+
 function(pid0_configure_c_executable target_name)
   if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(
@@ -194,6 +210,7 @@ function(pid0_configure_c_executable target_name)
     target_compile_options(${target_name} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(${target_name} PRIVATE -fsanitize=address,undefined)
   endif()
+  pid0_configure_bootlin_runtime(${target_name})
 endfunction()
 
 add_library(pid0_static STATIC ${PID0_SOURCES})

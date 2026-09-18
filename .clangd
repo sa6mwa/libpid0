@@ -1,2 +1,4 @@
+# clangd reads only the native debug compile database. Cross, package, and
+# release configurations prove target behavior with the selected toolchain.
 CompileFlags:
   CompilationDatabase: build/debug

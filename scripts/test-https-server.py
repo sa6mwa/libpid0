@@ -3,7 +3,6 @@ import argparse
 import http.server
 import os
 import ssl
-import time
 
 
 class FixtureHandler(http.server.SimpleHTTPRequestHandler):
@@ -15,15 +14,6 @@ class FixtureHandler(http.server.SimpleHTTPRequestHandler):
         with open(self._access_log, "a", encoding="utf-8") as log:
             log.write(f"{self.path}\n")
         super().do_GET()
-
-    def copyfile(self, source, outputfile):
-        while True:
-            data = source.read(8192)
-            if not data:
-                return
-            outputfile.write(data)
-            outputfile.flush()
-            time.sleep(0.005)
 
     def log_message(self, format, *args):
         del format, args

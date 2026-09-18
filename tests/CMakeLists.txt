@@ -149,11 +149,51 @@ set_tests_properties(
 if(TARGET pid0-single-header-example)
   add_test(
     NAME pid0-single-header-example
-    COMMAND
-      ${CMAKE_COMMAND} -E env
-        PID0_EXAMPLE_SLEEP_SECONDS=0
-        $<TARGET_FILE:pid0-single-header-example>
-        Example
+    COMMAND $<TARGET_FILE:pid0-single-header-example> Example
   )
   set_tests_properties(pid0-single-header-example PROPERTIES LABELS "example-smoke;local" TIMEOUT 10)
 endif()
+
+set(PID0_RUNTIME_TEST_EXECUTABLES
+  "$<TARGET_FILE:pid0-test-helper>"
+  "$<TARGET_FILE:pid0-unit-tests>"
+  "$<TARGET_FILE:pid0-single-header-unit-tests>"
+  "$<TARGET_FILE:pid0-integration-tests>"
+)
+if(TARGET pid0-example)
+  list(APPEND PID0_RUNTIME_TEST_EXECUTABLES "$<TARGET_FILE:pid0-example>")
+endif()
+if(TARGET pid0-single-header-example)
+  list(APPEND PID0_RUNTIME_TEST_EXECUTABLES "$<TARGET_FILE:pid0-single-header-example>")
+endif()
+list(JOIN PID0_RUNTIME_TEST_EXECUTABLES "|" PID0_RUNTIME_TEST_EXECUTABLES_ARG)
+set(PID0_RUNTIME_TEST_STATIC OFF)
+if(CMAKE_EXE_LINKER_FLAGS MATCHES "(^|[ \t])-static([ \t]|$)")
+  set(PID0_RUNTIME_TEST_STATIC ON)
+endif()
+# Do not run a foreign ELF loader through CTest or QEMU. Cross configurations
+# retain metadata-only verification until the project explicitly supports a runner.
+set(PID0_RUNTIME_TEST_VERIFY_RESOLUTION OFF)
+if(PID0_TARGET_ID MATCHES "^x86_64-linux-")
+  set(PID0_RUNTIME_TEST_VERIFY_RESOLUTION ON)
+endif()
+set(PID0_RUNTIME_TEST_REQUIRED_LIBRARIES "")
+if(PID0_ENABLE_ASAN)
+  list(APPEND PID0_RUNTIME_TEST_REQUIRED_LIBRARIES libasan.so libubsan.so)
+endif()
+list(JOIN PID0_RUNTIME_TEST_REQUIRED_LIBRARIES "|" PID0_RUNTIME_TEST_REQUIRED_LIBRARIES_ARG)
+add_test(
+  NAME pid0-bootlin-runtime
+  COMMAND
+    ${CMAKE_COMMAND}
+      "-DPID0_READELF=${CMAKE_READELF}"
+      "-DPID0_EXPECT_STATIC=${PID0_RUNTIME_TEST_STATIC}"
+      "-DPID0_EXPECTED_INTERPRETER=${PID0_BOOTLIN_ELF_INTERPRETER}"
+      "-DPID0_EXPECTED_RPATH=${PID0_BOOTLIN_RUNTIME_RPATH}"
+      "-DPID0_EXPECTED_RUNTIME_ROOT=${PID0_BOOTLIN_ROOT}"
+      "-DPID0_VERIFY_RUNTIME_RESOLUTION=${PID0_RUNTIME_TEST_VERIFY_RESOLUTION}"
+      "-DPID0_REQUIRED_RUNTIME_LIBRARIES=${PID0_RUNTIME_TEST_REQUIRED_LIBRARIES_ARG}"
+      "-DPID0_EXECUTABLES=${PID0_RUNTIME_TEST_EXECUTABLES_ARG}"
+      -P ${CMAKE_SOURCE_DIR}/tests/pid0_bootlin_runtime_test.cmake
+)
+set_tests_properties(pid0-bootlin-runtime PROPERTIES LABELS "local;runtime" TIMEOUT 10)

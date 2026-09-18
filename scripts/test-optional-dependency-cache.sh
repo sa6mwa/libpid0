@@ -20,7 +20,8 @@ main() {
   local build_dir=""
 
   command -v cmake >/dev/null 2>&1 || fail "cmake is required"
-  tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/libpid0-optional-dependency-cache.XXXXXX")"
+  mkdir -p "${repo_root}/build"
+  tmp_root="$(mktemp -d "${repo_root}/build/optional-dependency-cache.XXXXXX")"
   build_dir="${tmp_root}/build"
 
   env -u HOME -u XDG_CACHE_HOME -u CPKT_DEPENDENCY_CACHE \

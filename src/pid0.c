@@ -244,8 +244,6 @@ static int pid0_supervise(pid0_submain_fn submain, int argc, char **argv) {
       return 111;
     }
     if (child_state == 1) {
-      struct timespec brief_delay = {0, 50 * 1000 * 1000};
-      nanosleep(&brief_delay, NULL);
       pid0_drain_zombies_nonblock();
       sigprocmask(SIG_SETMASK, &old_mask, NULL);
       return exit_code;

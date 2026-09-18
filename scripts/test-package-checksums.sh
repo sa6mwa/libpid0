@@ -3,7 +3,8 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/.." && pwd)
-tmp_root=$(mktemp -d /tmp/libpid0-package-checksums.XXXXXX)
+mkdir -p "${repo_root}/build"
+tmp_root=$(mktemp -d "${repo_root}/build/package-checksums.XXXXXX")
 trap 'rm -rf -- "$tmp_root"' EXIT
 
 fail() {

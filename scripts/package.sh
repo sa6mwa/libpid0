@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
 dist_dir="${repo_root}/dist"
+workspace_dir="${repo_root}/build"
 
 target_presets=(
   x86_64-linux-musl-release
@@ -59,7 +60,8 @@ build_binary_sdk() {
   version="$(cache_value "${cache_path}" CMAKE_PROJECT_VERSION)"
   target_id="$(cache_value "${cache_path}" PID0_TARGET_ID)"
   archive_path="${dist_dir}/libpid0-${version}-${target_id}.tar.gz"
-  stage_dir="$(mktemp -d "${dist_dir}/.stage.XXXXXX")"
+  mkdir -p "${workspace_dir}"
+  stage_dir="$(mktemp -d "${workspace_dir}/package-stage.XXXXXX")"
   payload_root="${stage_dir}/libpid0-${version}-${target_id}"
 
   cmake --install "${build_dir}" --prefix "${payload_root}"
@@ -102,7 +104,8 @@ build_source_archive() {
   local stage_dir=""
   local archive_path="${dist_dir}/libpid0-${version}.tar.gz"
 
-  stage_dir="$(mktemp -d "${dist_dir}/.source.XXXXXX")"
+  mkdir -p "${workspace_dir}"
+  stage_dir="$(mktemp -d "${workspace_dir}/package-source.XXXXXX")"
   stage_source_archive "${version}" "${stage_dir}"
   (
     cd "${stage_dir}"

@@ -67,18 +67,26 @@ static void test_pid1_wrapper_returns_child_exit_code(void **state) {
 
 static void test_pid1_wrapper_forwards_sigterm(void **state) {
   int exit_code = 0;
+  int ready_pipe[2] = {-1, -1};
+  char ready_fd[32];
+  char ready = '\0';
   pid_t pid = -1;
-  struct timespec delay = {0, 150 * 1000 * 1000};
   (void)state;
 
   if (!unshare_available()) {
     skip();
   }
 
-  assert_int_equal(run_unshare_helper("signal-wait", NULL, &exit_code, &pid),
-                   0);
-
-  nanosleep(&delay, NULL);
+  assert_int_equal(pipe(ready_pipe), 0);
+  assert_true(snprintf(ready_fd, sizeof(ready_fd), "%d", ready_pipe[1]) > 0);
+  assert_int_equal(
+      run_unshare_helper("signal-wait", ready_fd, &exit_code, &pid), 0);
+  assert_int_equal(close(ready_pipe[1]), 0);
+  ready_pipe[1] = -1;
+  assert_int_equal(read(ready_pipe[0], &ready, 1), 1);
+  assert_int_equal(ready, 'R');
+  assert_int_equal(close(ready_pipe[0]), 0);
+  ready_pipe[0] = -1;
 
   assert_int_equal(kill(pid, SIGTERM), 0);
   assert_int_equal(wait_for_process(pid, &exit_code), 0);
